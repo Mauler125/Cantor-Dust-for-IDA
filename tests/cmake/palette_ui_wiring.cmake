@@ -69,8 +69,8 @@ endforeach()
 
 # Preserve the user's finalized About heading and front-panel labels.
 foreach(_text IN ITEMS
-    "Support developer</a>"
-    "settingsTabs->addTab( aboutPage, \"About/Credits\" )"
+    "Support developer &#9825;</a>"
+    "m_aboutDialog->setWindowTitle( \"About Cantor Dust\" )"
     "Created by Kawe Mazidjatari")
     string(FIND "${_panel}" "${_text}" _at)
     if(_at EQUAL -1)

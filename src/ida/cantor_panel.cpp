@@ -1,5 +1,6 @@
 #include "ida/cantor_panel.h"
 #include "ida/cantor_panel_detail.h"
+#include "ida/universe_search_layout.h"
 #include "cantordust/scalar_types.h"
 
 #include "ida/ida_memory.h"
@@ -33,6 +34,12 @@
 #include <QSaveFile>
 #include <QMessageBox>
 #include <QSignalBlocker>
+#include <QMenuBar>
+#include <QScrollArea>
+#include <QEvent>
+#include <QScreen>
+
+#include <cmath>
 
 #include <algorithm>
 #include <cstdint>
@@ -45,9 +52,78 @@ namespace cantordust
 
 namespace
 {
+// Preserve the full size hint for normal horizontal layout while allowing
+// the parent dock to shrink far enough for responsive row wrapping to run.
+class FlexibleWidthPanel final : public QWidget
+{
+public:
+    using QWidget::QWidget;
+
+    QSize minimumSizeHint() const override
+    {
+        QSize hint = QWidget::minimumSizeHint();
+        hint.setWidth( 0 );
+        return hint;
+    }
+};
+
 constexpr int kUniverseSpacingMinPercent = 25;
 constexpr int kUniverseSpacingMaxPercent = 10000;
 constexpr int kUniverseSpacingDefaultPercent = 1000;
+
+// Choose a themed hyperlink color with readable contrast against the
+// panel background. Some IDA light themes use very pale link accents.
+f64 ColorChannelLinear( const int channel )
+{
+    const f64 value = static_cast< f64 >( channel ) / 255.0;
+
+    if ( value <= 0.04045 )
+        return value / 12.92;
+
+    return std::pow( ( value + 0.055 ) / 1.055, 2.4 );
+}
+
+f64 ColorLuminance( const QColor& color )
+{
+    return 0.2126 * ColorChannelLinear( color.red() ) +
+        0.7152 * ColorChannelLinear( color.green() ) +
+        0.0722 * ColorChannelLinear( color.blue() );
+}
+
+f64 ColorContrast( const QColor& first, const QColor& second )
+{
+    const f64 firstLuminance = ColorLuminance( first );
+    const f64 secondLuminance = ColorLuminance( second );
+    const f64 lighter = std::max( firstLuminance, secondLuminance );
+    const f64 darker = std::min( firstLuminance, secondLuminance );
+    return ( lighter + 0.05 ) / ( darker + 0.05 );
+}
+
+QColor ReadableLinkColor( const QPalette& palette )
+{
+    const QColor background = palette.color( QPalette::Window );
+    const QColor foreground = palette.color( QPalette::WindowText );
+    const QColor link = palette.color( QPalette::Link );
+    constexpr f64 minimumContrast = 4.5;
+
+    if ( ColorContrast( link, background ) >= minimumContrast )
+        return link;
+
+    // Preserve as much of the theme's link tint as possible; move toward
+    // the native text color only when necessary for legibility.
+    for ( int step = 1; step <= 16; ++step )
+    {
+        const QColor candidate(
+            ( link.red() * ( 16 - step ) + foreground.red() * step ) / 16,
+            ( link.green() * ( 16 - step ) + foreground.green() * step ) / 16,
+            ( link.blue() * ( 16 - step ) + foreground.blue() * step ) / 16 );
+
+        if ( ColorContrast( candidate, background ) >= minimumContrast )
+            return candidate;
+    }
+
+    return foreground;
+}
 }
 
 static void Ida_AddViewOptions( QComboBox* const box )
@@ -61,9 +137,7 @@ static void Ida_AddViewOptions( QComboBox* const box )
 
 CantorPanel::CantorPanel( QWidget* const parent )
     : QWidget( parent )
-    , m_settingsButton( new QPushButton( "Settings...", this ) )
-    , m_bookmarksButton( new QPushButton( "Bookmarks", this ) )
-    , m_exportButton( new QPushButton( "Export...", this ) )
+    , m_aboutDialog( new QDialog( this ) )
     , m_settingsDialog( new QDialog( this ) )
     , m_settingsTabs( new QTabWidget( m_settingsDialog ) )
     , m_filterImports( new QCheckBox( "Hide imports", m_settingsDialog ) )
@@ -83,7 +157,13 @@ CantorPanel::CantorPanel( QWidget* const parent )
     , m_idaFollowTimer( new QTimer( this ) )
     , m_universeNodeBudgetEdit( new QSpinBox( m_settingsDialog ) )
     , m_universeLinkBudgetEdit( new QSpinBox( m_settingsDialog ) )
-    , m_universeExplorerPanel( new QWidget( this ) )
+    , m_supplementalFeatures( new QWidget( this ) )
+    , m_cubeFeaturesPanel( new QWidget( m_supplementalFeatures ) )
+    , m_universeExplorerPanel( new QWidget( m_supplementalFeatures ) )
+    , m_universeSearchOptions( new FlexibleWidthPanel( m_universeExplorerPanel ) )
+    , m_universeNeighborsControls( new FlexibleWidthPanel( m_universeSearchOptions ) )
+    , m_universeTierControls( new FlexibleWidthPanel( m_universeSearchOptions ) )
+    , m_universeWrapPanel( new FlexibleWidthPanel( m_universeExplorerPanel ) )
     , m_universePathControls( new QWidget( this ) )
     , m_universeSearchEdit( new QLineEdit( this ) )
     , m_universeMinRefsEdit( new QSpinBox( this ) )
@@ -108,14 +188,15 @@ CantorPanel::CantorPanel( QWidget* const parent )
     , m_relativeNodeSizeToggle( new QCheckBox( "Relative node size", this ) )
     , m_organicLayoutToggle( new QCheckBox( "Organic universe layout", this ) )
     , m_antiAliasingToggle( new QCheckBox( "Anti-aliasing (3D universe)", this ) )
-    , m_cubeGeometryBox( new QComboBox( m_settingsDialog ) )
-    , m_cubeValuesBox( new QComboBox( m_settingsDialog ) )
-    , m_cubeSizeSlider( new QSlider( Qt::Horizontal, m_settingsDialog ) )
-    , m_cubeBrightnessSlider( new QSlider( Qt::Horizontal, m_settingsDialog ) )
+    , m_cubeGeometryBox( new QComboBox( m_cubeFeaturesPanel ) )
+    , m_cubeValuesBox( new QComboBox( m_cubeFeaturesPanel ) )
+    , m_cubeSizeSlider( new QSlider( Qt::Horizontal, m_cubeFeaturesPanel ) )
+    , m_cubeBrightnessSlider( new QSlider( Qt::Horizontal, m_cubeFeaturesPanel ) )
     , m_universeSpacingSlider( new QSlider( Qt::Horizontal, this ) )
     , m_universeSpacingEdit( new QSpinBox( this ) )
     , m_infoLabel( new QLabel( this ) )
     , m_rangeAddressLabel( new QLabel( this ) )
+    , m_supportLink( new QLabel( this ) )
     , m_hintLabel( new QLabel( this ) )
     , m_universeInspector( new QFrame( this ) )
     , m_inspectorTitle( new QLabel( m_universeInspector ) )
@@ -137,6 +218,9 @@ CantorPanel::CantorPanel( QWidget* const parent )
     QVBoxLayout* const root = new QVBoxLayout( this );
     root->setContentsMargins( 6, 6, 6, 4 );
     root->setSpacing( 4 );
+    QMenuBar* const menuBar = new QMenuBar( this );
+    root->setMenuBar( menuBar );
+
     QHBoxLayout* const selectorRow = new QHBoxLayout();
     selectorRow->setSpacing( 5 );
     root->addLayout( selectorRow );
@@ -153,11 +237,6 @@ CantorPanel::CantorPanel( QWidget* const parent )
     // Live sync is a frequent navigation action, not an Explorer setting.
     // Reuse the existing persisted checkbox without adding another row.
     selectorRow->addWidget( m_followIdaToggle );
-    m_bookmarksButton->setToolTip( "Save and restore named investigations in this IDA database." );
-    selectorRow->addWidget( m_bookmarksButton );
-    m_exportButton->setToolTip( "Export the displayed Function Universe as PNG, SVG, or Graphviz DOT." );
-    selectorRow->addWidget( m_exportButton );
-    selectorRow->addWidget( m_settingsButton );
 
     QHBoxLayout* const modeRow = new QHBoxLayout();
     modeRow->setSpacing( 5 );
@@ -190,6 +269,15 @@ CantorPanel::CantorPanel( QWidget* const parent )
 
     m_overviewViewBox->setToolTip( "Overview visualization mode." );
     m_viewBox->setToolTip( "Detail visualization mode." );
+    // Only render supplemental controls for modes that have them. Both
+    // groups may be shown if Overview and Detail use different 3D modes.
+    QVBoxLayout* const supplementalLayout =
+        new QVBoxLayout( m_supplementalFeatures );
+    supplementalLayout->setContentsMargins( 0, 0, 0, 0 );
+    supplementalLayout->setSpacing( 4 );
+    supplementalLayout->addWidget( m_cubeFeaturesPanel );
+    supplementalLayout->addWidget( m_universeExplorerPanel );
+    root->addWidget( m_supplementalFeatures );
     modeRow->addWidget( new QLabel( "Range:", this ) );
     m_resolutionBox->addItem( "256 x 256", QVariant::fromValue< int >( 256 ) );
     m_resolutionBox->addItem( "512 x 512", QVariant::fromValue< int >( 512 ) );
@@ -279,6 +367,9 @@ CantorPanel::CantorPanel( QWidget* const parent )
 
     m_overviewPaletteBox->setSizePolicy(
         QSizePolicy::Preferred, QSizePolicy::Fixed );
+    // These are state holders for Edit > Color Palettes, not floating dock widgets.
+    m_paletteBox->hide();
+    m_overviewPaletteBox->hide();
 
     const QSettings settings( "CantorDust", "IDA" );
     m_universeSpacingSlider->setValue( std::clamp(
@@ -345,77 +436,105 @@ CantorPanel::CantorPanel( QWidget* const parent )
     QFormLayout* const settingsForm = new QFormLayout();
     visualLayout->addLayout( settingsForm );
     settingsForm->addRow( "Resolution", m_resolutionBox );
-    settingsForm->addRow( "Overview palette", m_overviewPaletteBox );
-    settingsForm->addRow( "Detail palette", m_paletteBox );
     visualLayout->addWidget( m_overviewToggle );
     visualLayout->addWidget( m_entropyToggle );
-    visualLayout->addWidget( m_showGlobalsToggle );
-    visualLayout->addWidget( m_distinctCallersToggle );
-    visualLayout->addWidget( m_globalFieldsToggle );
-    visualLayout->addWidget( m_universeFocusRangeToggle );
-    visualLayout->addWidget( m_universeRangeHeatToggle );
-    visualLayout->addWidget( m_relativeNodeHeatToggle );
-    visualLayout->addWidget( m_relativeNodeSizeToggle );
-    visualLayout->addWidget( m_organicLayoutToggle );
-    visualLayout->addWidget( m_antiAliasingToggle );
     QHBoxLayout* const spacingRow = new QHBoxLayout();
     spacingRow->addWidget( m_universeSpacingSlider, 1 );
     spacingRow->addWidget( m_universeSpacingEdit );
     settingsForm->addRow( "Universe spacing", spacingRow );
     visualLayout->addStretch();
-    settingsTabs->addTab( visualPage, "Visualization" );
+    settingsTabs->addTab( visualPage, "Display" );
 
-    // Point cloud controls are shared by Detail and Overview cube views.
-    QWidget* const cubePage = new QWidget( settingsTabs );
+    QWidget* const universeStylePage = new QWidget( settingsTabs );
+    QVBoxLayout* const universeStyleLayout = new QVBoxLayout( universeStylePage );
+    universeStyleLayout->addWidget( m_showGlobalsToggle );
+    universeStyleLayout->addWidget( m_distinctCallersToggle );
+    universeStyleLayout->addWidget( m_globalFieldsToggle );
+    universeStyleLayout->addWidget( m_universeFocusRangeToggle );
+    universeStyleLayout->addWidget( m_universeRangeHeatToggle );
+    universeStyleLayout->addWidget( m_relativeNodeHeatToggle );
+    universeStyleLayout->addWidget( m_relativeNodeSizeToggle );
+    universeStyleLayout->addWidget( m_organicLayoutToggle );
+    universeStyleLayout->addWidget( m_antiAliasingToggle );
+    universeStyleLayout->addStretch();
+    settingsTabs->addTab( universeStylePage, "Universe Style" );
+
+    // The same Byte Cloud controls apply to Overview and Detail. Keep
+    // them beside the active visualization, not buried in All Settings.
+    QWidget* const cubePage = m_cubeFeaturesPanel;
     QVBoxLayout* const cubeLayout = new QVBoxLayout( cubePage );
-    QFormLayout* const cubeForm = new QFormLayout();
-    cubeLayout->addLayout( cubeForm );
-    m_cubeGeometryBox->addItems( { "Cube (XYZ)", "Sphere", "Cylinder", "Tetrahedron" } );
-    m_cubeValuesBox->addItems( { "u8 (trigraph)", "u16 little endian", "u16 big endian",
-        "u32 little endian", "u32 big endian", "u8 difference", "u8 popcount" } );
+    cubeLayout->setContentsMargins( 0, 0, 0, 0 );
+    cubeLayout->setSpacing( 4 );
 
-    cubeForm->addRow( "Geometry", m_cubeGeometryBox );
-    cubeForm->addRow( "Values", m_cubeValuesBox );
-    m_cubeSizeSlider->setRange( 50, 200 );
-    m_cubeSizeSlider->setToolTip( "Point diameter, 50-200%; 100% is the original size." );
-    m_cubeBrightnessSlider->setRange( 25, 300 );
-    m_cubeBrightnessSlider->setToolTip( "Point exposure, 25-300%; 100% is the original brightness." );
-    auto cubePercentRow = [cubePage]( QSlider* const slider ) {
-        QHBoxLayout* const row = new QHBoxLayout();
-        row->setContentsMargins( 0, 0, 0, 0 );
-        QLabel* const percent = new QLabel( cubePage );
-        percent->setMinimumWidth( 46 );
-        percent->setAlignment( Qt::AlignRight | Qt::AlignVCenter );
-        row->addWidget( slider, 1 );
-        row->addWidget( percent );
-        QObject::connect( slider, &QSlider::valueChanged,
-            percent, [percent]( int value ) {
-                percent->setText( QString::number( value ) + "%" );
-            } );
-
-        percent->setText( QString::number( slider->value() ) + "%" );
-        return row;
-    };
-    cubeForm->addRow( "Point size", cubePercentRow( m_cubeSizeSlider ) );
-    cubeForm->addRow( "Brightness", cubePercentRow( m_cubeBrightnessSlider ) );
-    QLabel* const cubeHelp = new QLabel(
-        "The XYZ gizmo follows the camera (X red, Y green, Z blue). "
+    QHBoxLayout* const cubeSelectionRow = new QHBoxLayout();
+    cubeSelectionRow->setContentsMargins( 0, 0, 0, 0 );
+    cubeSelectionRow->setSpacing( 5 );
+    cubeSelectionRow->addWidget( new QLabel( "3D Byte:", cubePage ) );
+    cubeSelectionRow->addWidget( new QLabel( "Geometry:", cubePage ) );
+    m_cubeGeometryBox->addItems(
+        { "Cube (XYZ)", "Sphere", "Cylinder", "Tetrahedron" } );
+    m_cubeGeometryBox->setSizePolicy(
+        QSizePolicy::Ignored, QSizePolicy::Fixed );
+    m_cubeGeometryBox->setMinimumWidth( 90 );
+    cubeSelectionRow->addWidget( m_cubeGeometryBox, 1 );
+    cubeSelectionRow->addWidget( new QLabel( "Values:", cubePage ) );
+    m_cubeValuesBox->addItems( { "u8 (trigraph)", "u16 little endian",
+        "u16 big endian", "u32 little endian", "u32 big endian",
+        "u8 difference", "u8 popcount" } );
+    m_cubeValuesBox->setSizePolicy(
+        QSizePolicy::Ignored, QSizePolicy::Fixed );
+    m_cubeValuesBox->setMinimumWidth( 105 );
+    m_cubeValuesBox->setToolTip(
         "Integer modes sample three consecutive scalar values from the "
         "navigable anchor; u16/u32 use the most significant byte per axis. "
-        "Byte differences and bit counts can reveal other structures.", cubePage );
+        "Byte differences and bit counts can reveal other structures." );
+    cubeSelectionRow->addWidget( m_cubeValuesBox, 1 );
+    cubeLayout->addLayout( cubeSelectionRow );
 
-    cubeHelp->setWordWrap( true );
-    cubeLayout->addWidget( cubeHelp );
-    QPushButton* const resetCube = new QPushButton( "Reset 3D byte defaults", cubePage );
-    cubeLayout->addWidget( resetCube );
+    QHBoxLayout* const cubeAppearanceRow = new QHBoxLayout();
+    cubeAppearanceRow->setContentsMargins( 0, 0, 0, 0 );
+    cubeAppearanceRow->setSpacing( 5 );
+    cubeAppearanceRow->addWidget( new QLabel( "Size:", cubePage ) );
+    m_cubeSizeSlider->setRange( 50, 200 );
+    m_cubeSizeSlider->setToolTip(
+        "Point diameter, 50-200%; 100% is the original size." );
+    cubeAppearanceRow->addWidget( m_cubeSizeSlider, 1 );
+
+    QLabel* const cubeSizePercent = new QLabel( cubePage );
+    cubeSizePercent->setMinimumWidth( 42 );
+    cubeSizePercent->setAlignment( Qt::AlignRight | Qt::AlignVCenter );
+    cubeAppearanceRow->addWidget( cubeSizePercent );
+    QObject::connect( m_cubeSizeSlider, &QSlider::valueChanged,
+        cubeSizePercent, [cubeSizePercent]( const int value ) {
+            cubeSizePercent->setText( QString::number( value ) + "%" );
+        } );
+
+    cubeAppearanceRow->addWidget( new QLabel( "Brightness:", cubePage ) );
+    m_cubeBrightnessSlider->setRange( 25, 300 );
+    m_cubeBrightnessSlider->setToolTip(
+        "Point exposure, 25-300%; 100% is the original brightness." );
+    cubeAppearanceRow->addWidget( m_cubeBrightnessSlider, 1 );
+
+    QLabel* const cubeBrightnessPercent = new QLabel( cubePage );
+    cubeBrightnessPercent->setMinimumWidth( 42 );
+    cubeBrightnessPercent->setAlignment( Qt::AlignRight | Qt::AlignVCenter );
+    cubeAppearanceRow->addWidget( cubeBrightnessPercent );
+    QObject::connect( m_cubeBrightnessSlider, &QSlider::valueChanged,
+        cubeBrightnessPercent, [cubeBrightnessPercent]( const int value ) {
+            cubeBrightnessPercent->setText( QString::number( value ) + "%" );
+        } );
+
+    QPushButton* const resetCube = new QPushButton( "Reset", cubePage );
+    resetCube->setToolTip( "Reset 3D Byte Cloud geometry, values, "
+        "point size, and brightness to their defaults." );
+    cubeAppearanceRow->addWidget( resetCube );
+    cubeLayout->addLayout( cubeAppearanceRow );
     QObject::connect( resetCube, &QPushButton::clicked, this, [this]() {
         m_cubeGeometryBox->setCurrentIndex( 0 );
         m_cubeValuesBox->setCurrentIndex( 0 );
         m_cubeSizeSlider->setValue( 100 );
         m_cubeBrightnessSlider->setValue( 100 );
     } );
-    cubeLayout->addStretch();
-    settingsTabs->addTab( cubePage, "3D Byte View" );
 
     const QSettings cubeSettings( "CantorDust", "IDA" );
     m_cubeGeometryBox->setCurrentIndex( std::clamp(
@@ -429,6 +548,10 @@ CantorPanel::CantorPanel( QWidget* const parent )
 
     m_cubeBrightnessSlider->setValue( std::clamp(
         cubeSettings.value( "cubeBrightness", 100 ).toInt(), 25, 300 ) );
+    cubeSizePercent->setText(
+        QString::number( m_cubeSizeSlider->value() ) + "%" );
+    cubeBrightnessPercent->setText(
+        QString::number( m_cubeBrightnessSlider->value() ) + "%" );
 
     const auto updateCubeRender = [this]() {
         const CubeRenderOptions_s opts{
@@ -525,7 +648,7 @@ CantorPanel::CantorPanel( QWidget* const parent )
         } );
 
     QLabel* const explorerHelp = new QLabel(
-        "Follow IDA is in the top toolbar. When off, IDA navigation "
+        "Follow IDA is in Navigate and the quick controls. When off, IDA navigation "
         "highlights visible function nodes without moving the graph. "
         "Hops 1-10 are selected in the main explorer. These budgets limit "
         "graph growth at hops 2-10; at most 24 new functions are added "
@@ -616,9 +739,31 @@ CantorPanel::CantorPanel( QWidget* const parent )
     filterLayout->addStretch();
     settingsTabs->addTab( filterPage, "Graph Filters" );
 
-    QWidget* const aboutPage = new QWidget( settingsTabs );
+    QWidget* const searchPage = new QWidget( settingsTabs );
+    QVBoxLayout* const searchLayout = new QVBoxLayout( searchPage );
+    QFormLayout* const searchForm = new QFormLayout();
+    searchForm->addRow( "Minimum references", m_universeMinRefsEdit );
+    searchLayout->addLayout( searchForm );
+    searchLayout->addWidget( m_universeFilterToggle );
+    searchLayout->addWidget( m_universeClusterToggle );
+    QLabel* const searchHelp = new QLabel(
+        "Filter view limits the displayed Function Universe to the search "
+        "results. Clusters groups related functions into communities. "
+        "Both can also be toggled from Tools > Search & Graph.", searchPage );
+    searchHelp->setWordWrap( true );
+    searchLayout->addWidget( searchHelp );
+    searchLayout->addStretch();
+    settingsTabs->addTab( searchPage, "Search" );
+
+    m_aboutDialog->setWindowTitle( "About Cantor Dust" );
+    QVBoxLayout* const aboutDialogLayout = new QVBoxLayout( m_aboutDialog );
+    QScrollArea* const aboutScroller = new QScrollArea( m_aboutDialog );
+    aboutScroller->setFrameShape( QFrame::NoFrame );
+    aboutScroller->setWidgetResizable( true );
+    QWidget* const aboutPage = new QWidget( aboutScroller );
     QVBoxLayout* const aboutLayout = new QVBoxLayout( aboutPage );
     QLabel* const aboutLabel = new QLabel( aboutPage );
+    aboutLabel->setAlignment( Qt::AlignCenter );
     aboutLabel->setTextFormat( Qt::RichText );
     aboutLabel->setTextInteractionFlags( Qt::TextBrowserInteraction );
     aboutLabel->setOpenExternalLinks( true );
@@ -672,25 +817,36 @@ CantorPanel::CantorPanel( QWidget* const parent )
 
     aboutLayout->addWidget( aboutLabel );
     aboutLayout->addStretch();
-    settingsTabs->addTab( aboutPage, "About/Credits" );
+    aboutScroller->setWidget( aboutPage );
+    aboutDialogLayout->addWidget( aboutScroller );
+    QPushButton* const closeAbout = new QPushButton( "Close", m_aboutDialog );
+    aboutDialogLayout->addWidget( closeAbout, 0, Qt::AlignRight );
+    QObject::connect( closeAbout, &QPushButton::clicked,
+        m_aboutDialog, &QDialog::hide );
+
+    // Fit the About dialog to its wrapped text, rather than leaving a large
+    // blank area below the content. Keep scrolling available when the IDA
+    // font is enlarged or the screen is too short to show everything.
+    constexpr int aboutWidth = 510;
+    const QMargins dialogMargins = aboutDialogLayout->contentsMargins();
+    const QMargins pageMargins = aboutLayout->contentsMargins();
+    const int labelWidth = aboutWidth - dialogMargins.left() - dialogMargins.right()
+        - pageMargins.left() - pageMargins.right();
+    const int contentHeight = aboutLabel->heightForWidth( labelWidth )
+        + pageMargins.top() + pageMargins.bottom();
+    const int idealHeight = contentHeight + dialogMargins.top()
+        + dialogMargins.bottom() + aboutDialogLayout->spacing()
+        + closeAbout->sizeHint().height() + 4;
+    const QScreen* const aboutScreen = m_aboutDialog->screen();
+    const int maxHeight = aboutScreen != nullptr
+        ? std::max( 1, aboutScreen->availableGeometry().height() - 64 )
+        : idealHeight;
+    m_aboutDialog->resize( aboutWidth, std::min( idealHeight, maxHeight ) );
 
     QPushButton* const closeSettings = new QPushButton( "Close", m_settingsDialog );
     settingsLayout->addWidget( closeSettings );
     QObject::connect( closeSettings, &QPushButton::clicked,
         m_settingsDialog, &QDialog::hide );
-
-    QObject::connect( m_exportButton, &QPushButton::clicked,
-        this, [this]() { ExportUniverseGraph(); } );
-
-    QObject::connect( m_bookmarksButton, &QPushButton::clicked,
-        this, [this]() { ShowBookmarkManager(); } );
-
-    QObject::connect( m_settingsButton, &QPushButton::clicked,
-        this, [this]() {
-            m_settingsDialog->show();
-            m_settingsDialog->raise();
-            m_settingsDialog->activateWindow();
-        } );
 
     m_rangeEdit->setValidator( new QRegularExpressionValidator(
         QRegularExpression( QStringLiteral( "[0-9]+" ) ), m_rangeEdit ) );
@@ -723,9 +879,11 @@ CantorPanel::CantorPanel( QWidget* const parent )
         "Reference tiers: each shows up to 4096 retained nodes, from busiest to quietest." );
 
     m_universeCategoryBox->setMinimumContentsLength( 9 );
+    m_universeCategoryBox->setMinimumWidth( 80 );
+    // The Tier selector must fill the remaining width, just like Neighbors.
+    // The previous cap left a wide gap and could clip the arrow in IDA docks.
     m_universeCategoryBox->setSizePolicy(
-        QSizePolicy::Preferred, QSizePolicy::Fixed );
-
+        QSizePolicy::Expanding, QSizePolicy::Fixed );
     m_universeCategoryBox->setSizeAdjustPolicy(
         QComboBox::AdjustToMinimumContentsLengthWithIcon );
 
@@ -735,31 +893,78 @@ CantorPanel::CantorPanel( QWidget* const parent )
 
     exploreLayout->setContentsMargins( 0, 0, 0, 0 );
     exploreLayout->setSpacing( 4 );
-    QHBoxLayout* const searchRow = new QHBoxLayout();
-    searchRow->setSpacing( 5 );
-    searchRow->addWidget( new QLabel( "Find:", this ) );
+
+    // Keep Find, Neighbors and Tier on one line when the dock is wide.
+    // At narrower widths move the latter two as a group to a second row:
+    // reducing a combo's size hint alone still left Tier outside the dock.
+    m_universeSearchRow = new QHBoxLayout();
+    m_universeSearchRow->setSpacing( 5 );
+    m_universeSearchRow->addWidget( new QLabel( "Find:", this ) );
     m_universeSearchEdit->setPlaceholderText( "Function name / hex address" );
     m_universeSearchEdit->setClearButtonEnabled( true );
     m_universeSearchEdit->setMinimumWidth( 120 );
-    searchRow->addWidget( m_universeSearchEdit, 1 );
-    searchRow->addWidget( new QLabel( "Min refs:", this ) );
-    m_universeMinRefsEdit->setRange( 0, 250000 );
-    m_universeMinRefsEdit->setMaximumWidth( 85 );
-    searchRow->addWidget( m_universeMinRefsEdit );
-    searchRow->addWidget( m_universeFilterToggle );
-    QPushButton* const advancedFilterButton = new QPushButton( "Filters...", this );
-    advancedFilterButton->setToolTip( "Function-type and reference-count filters." );
-    searchRow->addWidget( advancedFilterButton );
-    QObject::connect( advancedFilterButton, &QPushButton::clicked,
-        this, [this, filterPage]() {
-            m_settingsTabs->setCurrentWidget( filterPage );
-            m_settingsDialog->show();
-            m_settingsDialog->raise();
-            m_settingsDialog->activateWindow();
-        } );
+    m_universeSearchRow->addWidget( m_universeSearchEdit, 1 );
 
-    searchRow->addWidget( new QLabel( "Tier:", this ) );
-    searchRow->addWidget( m_universeCategoryBox );
+    // Keep the labels with their respective selectors. The pair groups can
+    // move from one horizontal row to two rows independently of Find; even
+    // narrower docks can stack each label above its selector.
+    m_universeOptionsLayout = new QBoxLayout(
+        QBoxLayout::LeftToRight, m_universeSearchOptions );
+    m_universeOptionsLayout->setContentsMargins( 0, 0, 0, 0 );
+    m_universeOptionsLayout->setSpacing( 5 );
+
+    m_universeNeighborsLayout = new QBoxLayout(
+        QBoxLayout::LeftToRight, m_universeNeighborsControls );
+    m_universeNeighborsLayout->setContentsMargins( 0, 0, 0, 0 );
+    m_universeNeighborsLayout->setSpacing( 5 );
+    QLabel* const neighborsLabel = new QLabel(
+        "Neighbors:", m_universeNeighborsControls );
+    neighborsLabel->setSizePolicy( QSizePolicy::Fixed, QSizePolicy::Fixed );
+    m_universeNeighborsLayout->addWidget( neighborsLabel );
+    m_universeFocusModeBox->setMinimumWidth( 70 );
+    m_universeFocusModeBox->setSizePolicy(
+        QSizePolicy::Expanding, QSizePolicy::Fixed );
+    m_universeNeighborsLayout->addWidget( m_universeFocusModeBox, 1 );
+
+    m_universeTierLayout = new QBoxLayout(
+        QBoxLayout::LeftToRight, m_universeTierControls );
+    m_universeTierLayout->setContentsMargins( 0, 0, 0, 0 );
+    m_universeTierLayout->setSpacing( 5 );
+    QLabel* const tierLabel = new QLabel( "Tier:", m_universeTierControls );
+    tierLabel->setSizePolicy( QSizePolicy::Fixed, QSizePolicy::Fixed );
+    m_universeTierLayout->addWidget( tierLabel );
+    m_universeTierLayout->addWidget( m_universeCategoryBox, 1 );
+
+    // Both pairs use the full row when stacked, with the dropdown flush to
+    // the right edge. When side by side, each dropdown grows within its pair.
+    m_universeNeighborsControls->setSizePolicy(
+        QSizePolicy::Expanding, QSizePolicy::Fixed );
+    m_universeTierControls->setSizePolicy(
+        QSizePolicy::Expanding, QSizePolicy::Fixed );
+    m_universeOptionsLayout->addWidget( m_universeNeighborsControls, 1 );
+    m_universeOptionsLayout->addWidget( m_universeTierControls, 1 );
+    m_universeSearchOptions->setSizePolicy(
+        QSizePolicy::Expanding, QSizePolicy::Fixed );
+    m_universeSearchRow->addWidget( m_universeSearchOptions );
+    exploreLayout->addLayout( m_universeSearchRow );
+
+    m_universeWrapRow = new QHBoxLayout( m_universeWrapPanel );
+    m_universeWrapRow->setContentsMargins( 0, 0, 0, 0 );
+    m_universeWrapRow->setSpacing( 5 );
+    // Align wrapped controls from the left. IDA can clip a dock below its
+    // contents' minimum width; right alignment would hide Tier again.
+    m_universeWrapPanel->setSizePolicy(
+        QSizePolicy::Expanding, QSizePolicy::Fixed );
+    exploreLayout->addWidget( m_universeWrapPanel );
+    m_universeWrapPanel->hide();
+    m_universeExplorerPanel->installEventFilter( this );
+    // IDA's TWidget is the actual visible dock. Other panel rows can have a
+    // larger minimum width, so watch dock resizes as well as our own.
+    if ( parentWidget() != nullptr )
+        parentWidget()->installEventFilter( this );
+
+    m_universeMinRefsEdit->setRange( 0, 250000 );
+    m_universeMinRefsEdit->setMaximumWidth( 100 );
     m_universeClusterToggle->setToolTip(
         "Group strongly interconnected functions in the Overview and "
         "unfocused Detail. Right-click a group to choose a member function." );
@@ -767,7 +972,6 @@ CantorPanel::CantorPanel( QWidget* const parent )
     m_universeClusterToggle->setChecked(
         settings.value( "communityMode", false ).toBool() );
 
-    searchRow->addWidget( m_universeClusterToggle );
     QObject::connect( m_universeClusterToggle, &QCheckBox::toggled,
         this, [this]( bool checked ) {
             QSettings preferences( "CantorDust", "IDA" );
@@ -778,7 +982,6 @@ CantorPanel::CantorPanel( QWidget* const parent )
             m_overviewUniverse->ReframeToHubs();
         } );
 
-    exploreLayout->addLayout( searchRow );
     QHBoxLayout* const resultRow = new QHBoxLayout();
     resultRow->setSpacing( 5 );
     m_universeSearchResults->setSizePolicy(
@@ -792,17 +995,14 @@ CantorPanel::CantorPanel( QWidget* const parent )
     QPushButton* const focusResult = new QPushButton( "Focus", this );
     resultRow->addWidget( jumpResult );
     resultRow->addWidget( focusResult );
-    resultRow->addWidget( new QLabel( "Neighbors:", this ) );
-    m_universeFocusModeBox->setMinimumWidth( 90 );
-    resultRow->addWidget( m_universeFocusModeBox );
     resultRow->addWidget( new QLabel( "Hops:", this ) );
     m_universeHopsEdit->setRange( 1, 10 );
     m_universeHopsEdit->setValue( 1 );
     m_universeHopsEdit->setFixedWidth( 52 );
     m_universeHopsEdit->setToolTip(
         "1: original focused neighbors. 2-10: expand in the selected "
-        "direction. Node/link budgets are configurable in Settings > "
-        "Explorer. Shift + right-click a node to toggle its branch." );
+        "direction. Node/link budgets are configurable under Tools > "
+        "Explorer Budgets. Shift + right-click a node to toggle its branch." );
 
     resultRow->addWidget( m_universeHopsEdit );
     exploreLayout->addLayout( resultRow );
@@ -819,7 +1019,6 @@ CantorPanel::CantorPanel( QWidget* const parent )
     m_universeClearPathButton->setToolTip(
         "Exit the call path view and restore the universe graph." );
 
-    root->addWidget( m_universeExplorerPanel );
 
     // Only user interaction with search chooses it as the next path
     // endpoint. Automatic re-ranking of search results must not override
@@ -998,9 +1197,11 @@ CantorPanel::CantorPanel( QWidget* const parent )
     QHBoxLayout* const pathRow = new QHBoxLayout( m_universePathControls );
     pathRow->setContentsMargins( 0, 0, 0, 0 );
     pathRow->setSpacing( 4 );
-    pathRow->addWidget( m_universePathFromButton );
-    pathRow->addWidget( m_universePathToButton );
-    pathRow->addWidget( m_universeClearPathButton );
+    // Path actions are available in Tools > Call Paths. Keep only the
+    // alternate-route selector in the dock when multiple routes exist.
+    m_universePathFromButton->hide();
+    m_universePathToButton->hide();
+    m_universeClearPathButton->hide();
     m_universeRouteBox->setMinimumWidth( 82 );
     m_universeRouteBox->setMaximumWidth( 145 );
     m_universeRouteBox->setToolTip(
@@ -1021,26 +1222,15 @@ CantorPanel::CantorPanel( QWidget* const parent )
     m_rangeAddressLabel->setMinimumWidth( 0 );
     QHBoxLayout* const rangeAddressRow = new QHBoxLayout();
     rangeAddressRow->addWidget( m_rangeAddressLabel, 1 );
-    QLabel* const supportLink = new QLabel( this );
-    supportLink->setTextFormat( Qt::RichText );
-    supportLink->setTextInteractionFlags( Qt::TextBrowserInteraction );
-    supportLink->setOpenExternalLinks( true );
-
-    const bool darkBackground =
-        supportLink->palette().color( QPalette::Window ).lightness() < 128;
-
-    const QString supportColor = darkBackground
-        ? QStringLiteral( "#79EAFF" ) : QStringLiteral( "#005A82" );
-
-    supportLink->setText( QStringLiteral(
-        "<a href='https://ko-fi.com/amos0' "
-        "style='color:%1; text-decoration:underline; "
-        "font-weight:600;'>&#9825; Support developer</a>" )
-        .arg( supportColor ) );
-
-    supportLink->setToolTip( "Support Cantor Dust on Ko-fi (opens browser)" );
-    supportLink->setSizePolicy( QSizePolicy::Fixed, QSizePolicy::Preferred );
-    rangeAddressRow->addWidget( supportLink, 0, Qt::AlignRight );
+    m_supportLink->setTextFormat( Qt::RichText );
+    m_supportLink->setTextInteractionFlags( Qt::TextBrowserInteraction );
+    m_supportLink->setOpenExternalLinks( true );
+    m_supportLink->setToolTip(
+        "Support Kawe Mazidjatari on Ko-fi (opens browser)" );
+    m_supportLink->setSizePolicy(
+        QSizePolicy::Fixed, QSizePolicy::Preferred );
+    UpdateSupportLink();
+    rangeAddressRow->addWidget( m_supportLink, 0, Qt::AlignRight );
     root->addLayout( rangeAddressRow );
 
     QHBoxLayout* const canvasRow = new QHBoxLayout();
@@ -1264,8 +1454,7 @@ CantorPanel::CantorPanel( QWidget* const parent )
             const bool universe =
                 m_viewBox->currentData().toInt() == CDV_UNIVERSE3D;
 
-            m_universeExplorerPanel->setVisible( universe ||
-                m_overviewViewBox->currentData().toInt() == CDV_UNIVERSE3D );
+            UpdateSupplementalFeatures();
 
             m_universePathControls->setVisible( universe );
 
@@ -1290,9 +1479,7 @@ CantorPanel::CantorPanel( QWidget* const parent )
         QOverload< int >::of( &QComboBox::currentIndexChanged ),
         this, [this]( int ) {
             m_overviewImageDirty = true;
-            m_universeExplorerPanel->setVisible(
-                m_viewBox->currentData().toInt() == CDV_UNIVERSE3D ||
-                m_overviewViewBox->currentData().toInt() == CDV_UNIVERSE3D );
+            UpdateSupplementalFeatures();
 
             m_universeCategoryBox->setVisible(
                 m_viewBox->currentData().toInt() == CDV_UNIVERSE3D ||
@@ -1530,43 +1717,14 @@ CantorPanel::CantorPanel( QWidget* const parent )
                 m_overviewViewBox->currentData().toInt() != CDV_UNIVERSE3D );
         } );
 
-    QObject::connect(
-        refreshButton, &QPushButton::clicked,
-        this, [this] {
-            m_universeLoaded = false;
-            HideUniverseInspector();
-            m_inspectorIndex = {};
-            m_universeData = {};
-            m_universeGraph = {};
-            m_overviewFilteredGraph = {};
-            m_detailUniverseGraph = {};
-            m_universeFocusAddress.reset();
-            m_universeHistory.Reset();
-            m_lastCursorFunction.reset();
-            m_universeFocusRangeToggle->setVisible( false );
-            m_universeRangeHeatToggle->setVisible(
-                m_viewBox->currentData().toInt() == CDV_UNIVERSE3D );
+    QObject::connect( refreshButton, &QPushButton::clicked,
+        this, [this]() { RefreshData(); } );
+    QObject::connect( cursorButton, &QPushButton::clicked,
+        this, [this]() { GoToIdaCursor(); } );
 
-            m_callerClickOrdinals.clear();
-            ListSegments( false );
-            RebuildRanges();
-            Reload();
-        } );
-
-    QObject::connect(
-        cursorButton, &QPushButton::clicked,
-        this, [this] {
-            if ( m_viewBox->currentData().toInt() == CDV_UNIVERSE3D )
-            {
-                CursorToUniverseFunction();
-                return;
-            }
-
-            ListSegments( true );
-            RebuildRanges();
-            PositionAtCursor();
-            Reload();
-        } );
+    BuildMenus( menuBar, visualPage, explorerPage,
+        filterPage, searchPage );
+    UpdateSupplementalFeatures();
 
     LoadInvestigationBookmarks();
     UpdateOverviewVisibility();
@@ -1575,6 +1733,154 @@ CantorPanel::CantorPanel( QWidget* const parent )
     PositionAtCursor();
     Reload();
     OnIdaCursorChanged( get_screen_ea() );
+}
+
+QWidget* CantorPanel::SupplementalFeaturesForMode( const View_e mode ) const
+{
+    switch ( mode )
+    {
+        case CDV_CUBE3D:
+            return m_cubeFeaturesPanel;
+
+        case CDV_UNIVERSE3D:
+            return m_universeExplorerPanel;
+
+        default:
+            return nullptr;
+    }
+}
+
+void CantorPanel::UpdateSupplementalFeatures()
+{
+    const View_e detailMode = static_cast< View_e >(
+        m_viewBox->currentData().toInt() );
+    const View_e overviewMode = static_cast< View_e >(
+        m_overviewViewBox->currentData().toInt() );
+
+    QWidget* const detailFeatures = SupplementalFeaturesForMode( detailMode );
+    QWidget* const overviewFeatures = SupplementalFeaturesForMode( overviewMode );
+
+    const bool showCube = detailFeatures == m_cubeFeaturesPanel ||
+        overviewFeatures == m_cubeFeaturesPanel;
+    const bool showUniverse = detailFeatures == m_universeExplorerPanel ||
+        overviewFeatures == m_universeExplorerPanel;
+
+    m_cubeFeaturesPanel->setVisible( showCube );
+    m_universeExplorerPanel->setVisible( showUniverse );
+    m_supplementalFeatures->setVisible( showCube || showUniverse );
+
+    if ( showUniverse )
+        UpdateUniverseSearchLayout( m_universeExplorerPanel->width() );
+}
+
+void CantorPanel::UpdateUniverseSearchLayout( const int availableWidth )
+{
+    if ( m_universeSearchRow == nullptr || m_universeWrapRow == nullptr ||
+         m_universeOptionsLayout == nullptr )
+    {
+        return;
+    }
+
+    const QWidget* const findLabel = m_universeSearchRow->itemAt( 0 )->widget();
+    const QWidget* const neighborsLabel =
+        m_universeNeighborsLayout->itemAt( 0 )->widget();
+    const QWidget* const tierLabel = m_universeTierLayout->itemAt( 0 )->widget();
+
+    // Use the widths of both selectors even while Tier is initially hidden.
+    // Never impose the combined width as a minimum on a narrow dock: that
+    // was the remaining cause of Tier being painted outside the panel.
+    const int neighborsWidth = neighborsLabel->sizeHint().width()
+        + m_universeFocusModeBox->minimumWidth()
+        + m_universeNeighborsLayout->spacing();
+    const int tierWidth = tierLabel->sizeHint().width()
+        + m_universeCategoryBox->minimumWidth()
+        + m_universeTierLayout->spacing();
+    const int findWidth = findLabel->sizeHint().width()
+        + m_universeSearchEdit->minimumWidth();
+    // The panel's Qt minimum size can exceed the *visible* IDA dock width
+    // because of unrelated fixed-width toolbar controls. Size the options
+    // against the dock's viewport, not merely this child widget's geometry.
+    int visibleWidth = availableWidth;
+    if ( parentWidget() != nullptr )
+    {
+        const QMargins margins = this->layout()->contentsMargins();
+        const int dockWidth = parentWidget()->contentsRect().width()
+            - margins.left() - margins.right();
+        visibleWidth = std::min( visibleWidth, std::max( 1, dockWidth ) );
+    }
+
+    const UniverseSearchLayout_s layout = Universe_SearchLayoutForWidth(
+        visibleWidth, findWidth, neighborsWidth, tierWidth,
+        2 * m_universeSearchRow->spacing() + 8,
+        m_universeOptionsLayout->spacing() );
+    // When the panel is larger than the clipped dock, a stretched Find box
+    // can otherwise push inline Tier outside the visible area.
+    const bool wrap = layout.wrap || availableWidth > visibleWidth + 2;
+    const bool stackOptions = layout.stackOptions;
+    const bool stackLabels = layout.stackLabels;
+
+    const bool unchanged = wrap == m_universeOptionsWrapped &&
+        stackOptions == m_universeOptionsStacked &&
+        stackLabels == m_universeLabelsStacked;
+    m_universeOptionsWrapped = wrap;
+    m_universeOptionsStacked = stackOptions;
+    m_universeLabelsStacked = stackLabels;
+
+    // Even if another toolbar row makes the parent panel too wide, Qt must
+    // never allocate the wrapped dropdowns beyond the dock's visible edge.
+    m_universeSearchOptions->setMaximumWidth( wrap
+        ? std::max( 1, visibleWidth ) : QWIDGETSIZE_MAX );
+
+    if ( unchanged )
+        return;
+
+    // On very narrow docks each pair also stacks internally, keeping the
+    // selectors clickable instead of allowing either group to overflow.
+    m_universeNeighborsLayout->setDirection( stackLabels
+        ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight );
+    m_universeTierLayout->setDirection( stackLabels
+        ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight );
+    m_universeOptionsLayout->setDirection( stackOptions
+        ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight );
+
+    if ( wrap )
+    {
+        m_universeSearchRow->removeWidget( m_universeSearchOptions );
+        m_universeWrapRow->addWidget( m_universeSearchOptions, 1 );
+        m_universeWrapPanel->show();
+    }
+    else
+    {
+        m_universeWrapRow->removeWidget( m_universeSearchOptions );
+        m_universeSearchRow->addWidget( m_universeSearchOptions );
+        m_universeWrapPanel->hide();
+    }
+
+    // Layout moves may reparent the widget. Its selectors and their signal
+    // connections are retained, and no artificial minimum width is applied.
+    m_universeSearchOptions->show();
+}
+
+void CantorPanel::UpdateSupportLink()
+{
+    const QColor color = ReadableLinkColor( m_supportLink->palette() );
+    m_supportLink->setText( QStringLiteral(
+        "<a href='https://ko-fi.com/amos0' "
+        "style='color:%1; text-decoration:underline; "
+        "font-weight:600;'>Support developer &#9825;</a>" )
+        .arg( color.name( QColor::HexRgb ) ) );
+}
+
+void CantorPanel::changeEvent( QEvent* const event )
+{
+    QWidget::changeEvent( event );
+
+    if ( event->type() == QEvent::PaletteChange ||
+         event->type() == QEvent::ApplicationPaletteChange ||
+         event->type() == QEvent::StyleChange )
+    {
+        UpdateSupportLink();
+    }
 }
 
 // Keep snapshots inside the IDB, not QSettings shared by every binary.

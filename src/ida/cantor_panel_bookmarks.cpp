@@ -355,9 +355,7 @@ bool CantorPanel::RestoreInvestigation( const QJsonObject& item )
         }
     }
 
-    m_universeExplorerPanel->setVisible(
-        m_viewBox->currentData().toInt() == CDV_UNIVERSE3D ||
-        m_overviewViewBox->currentData().toInt() == CDV_UNIVERSE3D );
+    UpdateSupplementalFeatures();
 
     m_universePathControls->setVisible( m_viewBox->currentData().toInt() == CDV_UNIVERSE3D );
     m_universeFocusRangeToggle->setVisible( m_universeFocusAddress.has_value() );
@@ -386,7 +384,7 @@ bool CantorPanel::RestoreInvestigation( const QJsonObject& item )
     return true;
 }
 
-void CantorPanel::ExportUniverseGraph()
+void CantorPanel::ExportUniverseGraph( const UniverseExportFormat_e format )
 {
     const bool hasDetail = m_detailStack->currentWidget() == m_universePlot &&
         m_universePlot->HasExportableGraph();
@@ -397,7 +395,7 @@ void CantorPanel::ExportUniverseGraph()
     if ( !hasDetail && !hasOverview )
     {
         QMessageBox::information( this, "Export Function Universe",
-            "Switch the Detail or Overview view to 3D Function Universe "
+            "Switch the Overview or Detail view to 3D Function Universe "
             "and load a graph before exporting." );
 
         return;
@@ -411,7 +409,7 @@ void CantorPanel::ExportUniverseGraph()
 
         const QString choice = QInputDialog::getItem( this,
             "Export Function Universe", "Which graph?",
-            { "Detail Universe", "Overview Universe" }, 0, false, &accepted );
+            { "Overview Universe", "Detail Universe" }, 0, false, &accepted );
 
         if ( !accepted )
             return;
@@ -427,10 +425,25 @@ void CantorPanel::ExportUniverseGraph()
     const QString pngFilter = "PNG Image (*.png)";
     const QString svgFilter = "SVG Vector Image (*.svg)";
     const QString dotFilter = "Graphviz DOT (*.dot)";
-    QString chosenFilter = pngFilter;
+    const QString chosenFormat = format == UniverseExportFormat_e::Svg
+        ? svgFilter : format == UniverseExportFormat_e::Dot
+        ? dotFilter : pngFilter;
+    QString chosenFilter = chosenFormat;
+    QString suggestedName = defaultName;
+
+    if ( format != UniverseExportFormat_e::Choose )
+    {
+        suggestedName.chop( 4 );
+        suggestedName += format == UniverseExportFormat_e::Svg ? ".svg"
+            : format == UniverseExportFormat_e::Dot ? ".dot" : ".png";
+    }
+
     QString filename = QFileDialog::getSaveFileName( this,
-        "Export Function Universe", defaultName,
-        pngFilter + ";;" + svgFilter + ";;" + dotFilter, &chosenFilter );
+        "Export Function Universe", suggestedName,
+        format == UniverseExportFormat_e::Choose
+            ? pngFilter + ";;" + svgFilter + ";;" + dotFilter
+            : chosenFormat,
+        &chosenFilter );
 
     if ( filename.isEmpty() )
         return;

@@ -13,6 +13,7 @@
 #include "tier1/universe_history.h"
 
 #include <QtWidgets>
+#include <QMenuBar>
 #include <QTimer>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -37,6 +38,7 @@ public:
 
 protected:
     bool eventFilter( QObject* watched, QEvent* event ) override;
+    void changeEvent( QEvent* event ) override;
 
 private:
     bool IsAllSegments() const;
@@ -89,7 +91,17 @@ private:
     QJsonObject CaptureInvestigation() const;
     bool RestoreInvestigation( const QJsonObject& bookmark );
     void ShowBookmarkManager();
-    void ExportUniverseGraph();
+    enum class UniverseExportFormat_e { Choose, Png, Svg, Dot };
+    void ExportUniverseGraph( UniverseExportFormat_e format = UniverseExportFormat_e::Choose );
+    void ShowSettingsTab( QWidget* page );
+    void RefreshData();
+    void GoToIdaCursor();
+    QWidget* SupplementalFeaturesForMode( View_e mode ) const;
+    void UpdateSupplementalFeatures();
+    void UpdateUniverseSearchLayout( int availableWidth );
+    void UpdateSupportLink();
+    void BuildMenus( QMenuBar* menuBar, QWidget* displayPage,
+        QWidget* explorerPage, QWidget* filterPage, QWidget* searchPage );
     UniverseFilterOptions_s CurrentAdvancedFilters() const;
     void NavigateUniverse( u64 address );
     void NavigateUniverseCaller( u64 address );
@@ -108,9 +120,7 @@ private:
     void NavigateOverview( usize offset );
     void HoverOverview( usize offset );
 
-    QPushButton* const m_settingsButton;
-    QPushButton* const m_bookmarksButton;
-    QPushButton* const m_exportButton;
+    QDialog* const m_aboutDialog;
     QDialog* const m_settingsDialog;
     QTabWidget* const m_settingsTabs;
     QCheckBox* const m_filterImports;
@@ -130,7 +140,13 @@ private:
     QTimer* const m_idaFollowTimer;
     QSpinBox* const m_universeNodeBudgetEdit;
     QSpinBox* const m_universeLinkBudgetEdit;
+    QWidget* const m_supplementalFeatures;
+    QWidget* const m_cubeFeaturesPanel;
     QWidget* const m_universeExplorerPanel;
+    QWidget* const m_universeSearchOptions;
+    QWidget* const m_universeNeighborsControls;
+    QWidget* const m_universeTierControls;
+    QWidget* const m_universeWrapPanel;
     QWidget* const m_universePathControls;
     QLineEdit* const m_universeSearchEdit;
     QSpinBox* const m_universeMinRefsEdit;
@@ -141,6 +157,14 @@ private:
     QPushButton* const m_universePathToButton;
     QPushButton* const m_universeClearPathButton;
     QComboBox* const m_universeRouteBox;
+    QHBoxLayout* m_universeSearchRow = nullptr;
+    QHBoxLayout* m_universeWrapRow = nullptr;
+    QBoxLayout* m_universeOptionsLayout = nullptr;
+    QBoxLayout* m_universeNeighborsLayout = nullptr;
+    QBoxLayout* m_universeTierLayout = nullptr;
+    bool m_universeOptionsWrapped = false;
+    bool m_universeOptionsStacked = false;
+    bool m_universeLabelsStacked = false;
     QComboBox* const m_viewBox;
     QComboBox* const m_overviewViewBox;
     QComboBox* const m_resolutionBox;
@@ -163,6 +187,7 @@ private:
     QSpinBox* const m_universeSpacingEdit;
     QLabel* const m_infoLabel;
     QLabel* const m_rangeAddressLabel;
+    QLabel* const m_supportLink;
     QLabel* const m_hintLabel;
     QFrame* const m_universeInspector;
     QLabel* const m_inspectorTitle;

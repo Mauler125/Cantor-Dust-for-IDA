@@ -280,7 +280,17 @@ void CantorPanel::CommitRangeText()
 
 bool CantorPanel::eventFilter( QObject* const watched, QEvent* const event )
 {
-    ( void ) watched;
+    if ( watched == m_universeExplorerPanel || watched == parentWidget() )
+    {
+        if ( event->type() == QEvent::Resize ||
+             event->type() == QEvent::FontChange ||
+             event->type() == QEvent::StyleChange )
+        {
+            UpdateUniverseSearchLayout( m_universeExplorerPanel->width() );
+        }
+
+        return QWidget::eventFilter( watched, event );
+    }
 
     if ( event->type() != QEvent::Wheel )
     {
@@ -765,9 +775,9 @@ void CantorPanel::Reload()
             .arg( static_cast< qulonglong >( m_totalLength ) ) +
         ( m_detailSampled ? QStringLiteral( " (sampled across selection)" )
                           : QString() ) +
-        QString( " | Detail %1 bytes | Overview %2 bytes" )
-            .arg( static_cast< qulonglong >( m_detailSpan ) )
-            .arg( static_cast< qulonglong >( m_overviewSpan ) ) );
+        QString( " | Overview %1 bytes | Detail %2 bytes" )
+            .arg( static_cast< qulonglong >( m_overviewSpan ) )
+            .arg( static_cast< qulonglong >( m_detailSpan ) ) );
 
     if ( m_viewBox->currentData().toInt() == CDV_UNIVERSE3D )
     {

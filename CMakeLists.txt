@@ -132,6 +132,13 @@ if(BUILD_TESTING)
         COMMAND ${CMAKE_COMMAND} -P
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/check_compound_scalar_aliases.cmake)
 
+    add_executable(cantordust_universe_search_layout_tests
+        tests/universe_search_layout_tests.cpp)
+    target_include_directories(cantordust_universe_search_layout_tests
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    add_test(NAME universe_search_layout
+        COMMAND cantordust_universe_search_layout_tests)
+
     add_executable(cantordust_scalar_types_tests tests/scalar_types_tests.cpp)
     target_include_directories(cantordust_scalar_types_tests
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/public)
@@ -258,6 +265,26 @@ if(BUILD_TESTING)
             -DCANTORDUST_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/svg_icon_resource.cmake)
 
+    add_test(NAME panel_menu_wiring
+        COMMAND ${CMAKE_COMMAND}
+            -DCANTORDUST_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/panel_menu_wiring.cmake)
+
+    add_test(NAME panel_supplemental_controls
+        COMMAND ${CMAKE_COMMAND}
+            -DCANTORDUST_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/panel_supplemental_controls.cmake)
+
+    add_test(NAME panel_overview_first_layout
+        COMMAND ${CMAKE_COMMAND}
+            -DCANTORDUST_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/panel_overview_first_layout.cmake)
+
+    add_test(NAME panel_narrow_universe_layout
+        COMMAND ${CMAKE_COMMAND}
+            -DCANTORDUST_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/panel_narrow_universe_layout.cmake)
+
     add_test(NAME cantor_panel_split_integrity
         COMMAND ${CMAKE_COMMAND}
             -DCANTORDUST_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
@@ -342,6 +369,7 @@ if(CANTORDUST_BUILD_IDA_PLUGIN)
         SOURCES
             src/ida/ida_plugin.cpp
             src/ida/cantor_panel.cpp
+            src/ida/cantor_panel_menus.cpp
             src/ida/cantor_panel_bookmarks.cpp
             src/ida/cantor_panel_ranges.cpp
             src/ida/cantor_panel_universe.cpp
