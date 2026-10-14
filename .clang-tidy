@@ -1,0 +1,12 @@
+---
+Checks: >
+  -*,
+  clang-analyzer-core.*,
+  clang-analyzer-cplusplus.*,
+  bugprone-use-after-move,
+  bugprone-integer-division,
+  performance-unnecessary-copy-initialization
+WarningsAsErrors: ''
+HeaderFilterRegex: 'src/(math|render|tier1|public)/.*'
+FormatStyle: none
+...

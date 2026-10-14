@@ -1,0 +1,30 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" style="enable-background:new 0 0 32 32;" version="1.1" viewBox="0 0 32 32" x="0px" y="0px">
+	<style type="text/css">
+		.st0{fill:#F0F0F0;}
+		.st1{fill:#13D1FF;}
+		.st2{fill:#212121;}
+		.st3{fill:#5DE8A2;}
+	</style>
+	<g>
+		<rect class="st0" height="29" width="29" x="1.4" y="1.5"/>
+		<g>
+			<rect class="st1" height="5.6" width="29" x="1.5" y="1.5"/>
+			<path class="st2" d="M30.5,1h-29C1.2,1,1,1.2,1,1.5v5.6v23.4C1,30.8,1.2,31,1.5,31h29c0.3,0,0.5-0.2,0.5-0.5V7.1V1.5    C31,1.2,30.8,1,30.5,1z M2,2h28v4.6H2V2z M2,30V7.6h28V30H2z"/>
+		</g>
+	</g>
+	<rect class="st3" height="22.4" width="28" x="2" y="7.6"/>
+	<defs>
+		<g id="cantordust_icon_nodes_asym_v3">
+			<line x1="15.8" y1="18.9" x2="8.7" y2="10.8" stroke-width="1.02" stroke-linecap="round"/>
+			<line x1="15.8" y1="18.9" x2="24.2" y2="16.2" stroke-width="1.02" stroke-linecap="round"/>
+			<line x1="15.8" y1="18.9" x2="12.1" y2="26.0" stroke-width="1.02" stroke-linecap="round"/>
+			<rect x="13.400" y="16.500" width="4.8" height="4.8"/>
+			<rect x="7.950" y="10.050" width="1.5" height="1.5"/>
+			<rect x="23.225" y="15.225" width="1.95" height="1.95"/>
+			<rect x="11.425" y="25.325" width="1.35" height="1.35"/>
+		</g>
+	</defs>
+	<use href="#cantordust_icon_nodes_asym_v3" fill="#2E8E5B" stroke="#2E8E5B" transform="translate(.48 .48)"/>
+	<use href="#cantordust_icon_nodes_asym_v3" fill="#014421" stroke="#014421"/>
+</svg>

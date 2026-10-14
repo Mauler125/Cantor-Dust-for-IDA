@@ -1,0 +1,5 @@
+<RCC>
+  <qresource prefix="/cantordust">
+    <file alias="cantor_dust.svg">cantor_dust.svg</file>
+  </qresource>
+</RCC>

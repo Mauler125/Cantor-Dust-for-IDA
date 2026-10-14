@@ -1,0 +1,235 @@
+#ifndef IDA_CANTOR_PANEL_H
+#define IDA_CANTOR_PANEL_H
+
+
+#include "cantordust/scalar_types.h"
+#include "ida/plot_widget.h"
+#include "ida/cube_widget.h"
+#include "ida/universe_widget.h"
+#include "cantordust/universe.h"
+#include "cantordust/palette.h"
+#include "ida/entropy_widget.h"
+#include "math/ranges.h"
+#include "tier1/universe_history.h"
+
+#include <QtWidgets>
+#include <QTimer>
+#include <QJsonArray>
+#include <QJsonObject>
+#include <ida.hpp>
+
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+
+namespace cantordust
+{
+
+class CantorPanel final : public QWidget
+{
+public:
+    explicit CantorPanel( QWidget* parent = nullptr );
+    // Called by the IDA UI address-change hook (main/UI thread).
+    void OnIdaCursorChanged( ea_t address );
+
+protected:
+    bool eventFilter( QObject* watched, QEvent* event ) override;
+
+private:
+    bool IsAllSegments() const;
+    usize Resolution() const;
+    Palette_e CurrentPalette() const;
+    Palette_e CurrentOverviewPalette() const;
+    usize WindowCapacity() const;
+    void SyncRangeControl();
+    void ListSegments( bool followCursor );
+    void RebuildRanges();
+    void PositionAtCursor();
+    void Reload();
+    void ResetEmpty( const QString& message );
+    void InvalidateOverviewSamples();
+    void LoadOverview();
+    void RenderCurrent();
+    void LoadUniverse();
+    void BuildUniverseCategory();
+    void RefreshUniverseSearch();
+    std::optional< u64 > SearchResultAddress() const;
+    std::optional< UniversePathEndpoint_s > PathEndpointSelection() const;
+    void ShowUniversePath( u64 from, u64 to );
+    void SelectUniverseRoute( int route );
+    void OpenCommunity( u64 representative, bool overview );
+    u64 VisibleCommunityAddress( u64 actual, bool overview ) const;
+    void ClearUniverseRoutes();
+    void HoverUniverse( usize index, bool overview );
+    void SelectUniverseInspector( u64 address );
+    void HideUniverseInspector();
+    void UpdateUniverseInspector( u64 address );
+    void ClearInspectorConnections();
+    void AddInspectorMessage( const QString& message );
+    void FocusUniverse( u64 address );
+    void ToggleUniverseBranch( u64 address );
+    void ClearUniverseFocus();
+    void ApplyUniverseFocus( std::optional< u64 > address );
+    void UniverseBack();
+    void UniverseForward();
+    std::vector< UniverseAddressRange_s > SelectedUniverseRanges() const;
+    void CommitRangeText();
+    void WheelRangeLarge( int steps );
+    void CursorToUniverseFunction();
+    std::optional< u64 > ResolveCursorUniverseAddress() const;
+    void UpdateRangeAddressLabel();
+    void RebuildDetailUniverse();
+    void NavigateUniverseOverview( u64 address );
+    void FollowIdaFunction();
+    void LoadInvestigationBookmarks();
+    bool SaveInvestigationBookmarks();
+    QJsonObject CaptureInvestigation() const;
+    bool RestoreInvestigation( const QJsonObject& bookmark );
+    void ShowBookmarkManager();
+    void ExportUniverseGraph();
+    UniverseFilterOptions_s CurrentAdvancedFilters() const;
+    void NavigateUniverse( u64 address );
+    void NavigateUniverseCaller( u64 address );
+    void RenderOverview();
+    void UpdateOverviewVisibility();
+    std::vector< QRect > BuildOverviewHighlights() const;
+    void SetWindowOffset( u64 offset );
+    void WheelOverview( usize source, usize ordinal,
+        usize pixels, int steps );
+
+    void WheelDetail( usize source, usize ordinal,
+        usize pixels, int steps );
+
+    void Navigate( usize index );
+    void Hover( usize index );
+    void NavigateOverview( usize offset );
+    void HoverOverview( usize offset );
+
+    QPushButton* const m_settingsButton;
+    QPushButton* const m_bookmarksButton;
+    QPushButton* const m_exportButton;
+    QDialog* const m_settingsDialog;
+    QTabWidget* const m_settingsTabs;
+    QCheckBox* const m_filterImports;
+    QCheckBox* const m_filterThunks;
+    QCheckBox* const m_filterLibraries;
+    QCheckBox* const m_filterGlobals;
+    QSpinBox* const m_filterMinimumIncoming;
+    QSpinBox* const m_filterMinimumOutgoing;
+    QCheckBox* const m_showGlobalsToggle;
+    QCheckBox* const m_distinctCallersToggle;
+    QCheckBox* const m_globalFieldsToggle;
+    QComboBox* const m_segmentBox;
+    QComboBox* const m_universeCategoryBox;
+    QComboBox* const m_universeFocusModeBox;
+    QSpinBox* const m_universeHopsEdit;
+    QCheckBox* const m_followIdaToggle;
+    QTimer* const m_idaFollowTimer;
+    QSpinBox* const m_universeNodeBudgetEdit;
+    QSpinBox* const m_universeLinkBudgetEdit;
+    QWidget* const m_universeExplorerPanel;
+    QWidget* const m_universePathControls;
+    QLineEdit* const m_universeSearchEdit;
+    QSpinBox* const m_universeMinRefsEdit;
+    QCheckBox* const m_universeFilterToggle;
+    QCheckBox* const m_universeClusterToggle;
+    QComboBox* const m_universeSearchResults;
+    QPushButton* const m_universePathFromButton;
+    QPushButton* const m_universePathToButton;
+    QPushButton* const m_universeClearPathButton;
+    QComboBox* const m_universeRouteBox;
+    QComboBox* const m_viewBox;
+    QComboBox* const m_overviewViewBox;
+    QComboBox* const m_resolutionBox;
+    QComboBox* const m_paletteBox;
+    QComboBox* const m_overviewPaletteBox;
+    QLineEdit* const m_rangeEdit;
+    QCheckBox* const m_overviewToggle;
+    QCheckBox* const m_entropyToggle;
+    QCheckBox* const m_universeFocusRangeToggle;
+    QCheckBox* const m_universeRangeHeatToggle;
+    QCheckBox* const m_relativeNodeHeatToggle;
+    QCheckBox* const m_relativeNodeSizeToggle;
+    QCheckBox* const m_organicLayoutToggle;
+    QCheckBox* const m_antiAliasingToggle;
+    QComboBox* const m_cubeGeometryBox;
+    QComboBox* const m_cubeValuesBox;
+    QSlider* const m_cubeSizeSlider;
+    QSlider* const m_cubeBrightnessSlider;
+    QSlider* const m_universeSpacingSlider;
+    QSpinBox* const m_universeSpacingEdit;
+    QLabel* const m_infoLabel;
+    QLabel* const m_rangeAddressLabel;
+    QLabel* const m_hintLabel;
+    QFrame* const m_universeInspector;
+    QLabel* const m_inspectorTitle;
+    QLabel* const m_inspectorSummary;
+    QScrollArea* const m_inspectorConnections;
+    QWidget* const m_inspectorConnectionContent;
+    QVBoxLayout* const m_inspectorConnectionLayout;
+    QSplitter* const m_plotSplitter;
+    EntropyWidget* const m_entropyStrip;
+    PlotWidget* const m_overviewPlot;
+    CubeWidget* const m_overviewCube;
+    UniverseWidget* const m_overviewUniverse;
+    QStackedWidget* const m_overviewStack;
+    PlotWidget* const m_plot;
+    CubeWidget* const m_cubePlot;
+    UniverseWidget* const m_universePlot;
+    QStackedWidget* const m_detailStack;
+
+    QJsonArray m_investigationBookmarks;
+    std::vector< ByteRange_s > m_ranges;
+    u64 m_totalLength = 0;
+    u64 m_windowOffset = 0;
+    u64 m_detailSpan = 0;
+    u64 m_overviewOffset = 0;
+    u64 m_overviewSpan = 0;
+    std::optional< u64 > m_exactRequestedOffset;
+    usize m_byteCount = 0;
+    // A logical selection can be much larger than the image pixel budget.
+    // For large selections the image is sampled across the entire span and
+    // source indices are absolute logical offsets (not indices into m_cells).
+    bool m_detailSampled = false;
+    std::vector< usize > m_detailSampleOffsets;
+    std::vector< ByteClassSummary_s > m_detailSampleClasses;
+    std::vector< CubeTriplet_s > m_detailCubeTriplets;
+    std::vector< ByteCell_s > m_cells;
+    std::vector< ByteCell_s > m_overviewCells;
+    std::vector< CubeTriplet_s > m_overviewTriplets;
+    std::vector< ByteClassSummary_s > m_overviewClasses;
+    std::vector< usize > m_overviewOffsets;
+    bool m_overviewImageDirty = true;
+    bool m_overviewCubeLoaded = false;
+    bool m_universeLoaded = false;
+    UniverseData_s m_universeData;
+    UniverseInspectorIndex_s m_inspectorIndex;
+    UniverseInspectorResult_s m_inspectorResult;
+    std::optional< u64 > m_inspectorAddress;
+    std::optional< u64 > m_lastHoveredAddress;
+    bool m_lastHoverWasOverview = false;
+    UniverseGraph_s m_universeGraph;
+    UniverseGraph_s m_overviewFilteredGraph;
+    std::unordered_map< u64, std::vector< u64 > > m_overviewCommunities;
+    std::optional< u64 > m_lastCursorFunction;
+    std::optional< u64 > m_idaFunctionAddress;
+    UniverseGraph_s m_detailUniverseGraph;
+    std::unordered_map< u64, std::vector< u64 > > m_detailCommunities;
+    std::optional< u64 > m_universePathFrom;
+    bool m_pathPreferSearchResult = false;
+    UniverseCallPath_s m_universeActivePath;
+    std::vector< UniverseCallPath_s > m_universeRoutes;
+    usize m_universeSelectedRoute = 0;
+    int m_horizontalWheelRemainder = 0;
+    std::optional< u64 > m_universeFocusAddress;
+    std::unordered_set< u64 > m_universeCollapsedNodes;
+    UniverseHistory m_universeHistory;
+    std::unordered_map< u64, usize > m_callerClickOrdinals;
+};
+
+} // namespace cantordust
+
+#endif // IDA_CANTOR_PANEL_H

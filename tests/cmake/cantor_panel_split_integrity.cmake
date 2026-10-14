@@ -1,0 +1,23 @@
+# The Qt/IDA integration is not compiled by portable CI. Check that moving
+# CantorPanel implementation methods into separate TUs did not drop any.
+if(NOT CANTORDUST_SOURCE_DIR)
+    message(FATAL_ERROR "CANTORDUST_SOURCE_DIR required")
+endif()
+file(STRINGS "${CANTORDUST_SOURCE_DIR}/tests/cmake/cantor_panel_methods.txt" _methods)
+file(GLOB _units "${CANTORDUST_SOURCE_DIR}/src/ida/cantor_panel*.cpp")
+set(_all "")
+foreach(_unit IN LISTS _units)
+    file(READ "${_unit}" _content)
+    string(APPEND _all "\n${_content}")
+endforeach()
+foreach(_method IN LISTS _methods)
+    if(_method MATCHES "^#" OR _method STREQUAL "")
+        continue()
+    endif()
+    string(REGEX MATCHALL "CantorPanel::${_method}[ \t\r\n]*\\(" _matches "${_all}")
+    list(LENGTH _matches _count)
+    if(NOT _count EQUAL 1)
+        message(FATAL_ERROR
+            "Expected one CantorPanel::${_method} definition, found ${_count}")
+    endif()
+endforeach()

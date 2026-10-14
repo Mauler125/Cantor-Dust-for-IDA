@@ -1,0 +1,105 @@
+name: core-ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Linux x64
+            os: ubuntu-24.04
+            msvc_arch: x64
+            run_tests: true
+          - label: Linux ARM64
+            os: ubuntu-24.04-arm
+            msvc_arch: x64
+            run_tests: true
+          - label: Windows x64
+            os: windows-2025
+            msvc_arch: x64
+            run_tests: true
+          # Cross-compile on x64: the ARM64 binary cannot execute here.
+          # Native runtime validation requires a Windows ARM64 machine.
+          - label: Windows ARM64 cross-build
+            os: windows-2025
+            msvc_arch: amd64_arm64
+            run_tests: false
+          - label: macOS Intel
+            os: macos-15-intel
+            msvc_arch: x64
+            run_tests: true
+          - label: macOS Apple Silicon
+            os: macos-15
+            msvc_arch: x64
+            run_tests: true
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v5
+
+      - name: Setup MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.msvc_arch }}
+
+      - name: Configure
+        run: >-
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DCANTORDUST_STRICT_WARNINGS=ON
+          -DCANTORDUST_CHECK_HEADERS=ON
+
+      - name: Build
+        run: cmake --build build --parallel 4
+
+      - name: Test
+        if: matrix.run_tests
+        run: ctest --test-dir build --output-on-failure
+
+  clang-and-sanitizers:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: seanmiddleditch/gha-setup-ninja@v5
+      - name: Configure Clang + ASan/UBSan
+        run: >-
+          cmake -S . -B build-sanitized -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_CXX_COMPILER=clang++
+          -DCANTORDUST_STRICT_WARNINGS=ON
+          -DCANTORDUST_CHECK_HEADERS=ON
+          -DCANTORDUST_ENABLE_SANITIZERS=ON
+      - name: Build
+        run: cmake --build build-sanitized --parallel 4
+      - name: Test with sanitizers
+        run: ctest --test-dir build-sanitized --output-on-failure
+
+  static-analysis:
+    # Advisory until the baseline clang-tidy findings have been triaged.
+    # Unlike warnings/tests, analyzer findings should not block established
+    # releases without first validating the new check on supported compilers.
+    continue-on-error: true
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install clang-tidy
+        run: sudo apt-get update && sudo apt-get install -y clang-tidy
+      - name: Configure compile commands
+        run: >-
+          cmake -S . -B build-analyze
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+      - name: Analyze portable hotspots
+        run: >-
+          clang-tidy -p build-analyze
+          src/render/universe.cpp src/render/universe_raster.cpp
+          src/tier1/universe_routes.cpp src/math/universe.cpp

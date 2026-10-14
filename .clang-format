@@ -1,0 +1,77 @@
+# CantorDust / C++17
+# Target formatter: clang-format 19.x.
+---
+Language: Cpp
+BasedOnStyle: LLVM
+Standard: c++17
+
+# Core layout: 4 spaces, Allman braces, ~80 columns.
+UseTab: Never
+IndentWidth: 4
+TabWidth: 4
+ContinuationIndentWidth: 4
+ColumnLimit: 80
+BreakBeforeBraces: Allman
+IndentBraces: false
+NamespaceIndentation: None
+IndentCaseLabels: true
+IndentCaseBlocks: false
+AccessModifierOffset: -4
+
+# Leave a simple single-statement guard without braces, but always on its
+# own line. Clang-format does NOT add braces conditionally for wrapped tests.
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortBlocksOnASingleLine: Never
+AllowShortFunctionsOnASingleLine: None
+AllowShortLoopsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortLambdasOnASingleLine: Inline
+AllowShortEnumsOnASingleLine: false
+
+# Spacing: f( value ), if ( condition ), array[ index ], vector< T >.
+SpaceBeforeParens: ControlStatements
+SpacesInParens: Custom
+SpacesInParensOptions:
+  InConditionalStatements: true
+  InCStyleCasts: false
+  InEmptyParentheses: false
+  ExceptDoubleParentheses: false
+  Other: true
+SpacesInSquareBrackets: true
+SpacesInAngles: Always
+SpaceAfterLogicalNot: true
+SpaceAfterTemplateKeyword: true
+SpaceBeforeAssignmentOperators: true
+PointerAlignment: Left
+ReferenceAlignment: Pointer
+DerivePointerAlignment: false
+
+# When wrapping is needed, favor readable vertical lists and leave operators
+# at the ends of continuation lines (as in the existing source).
+BinPackArguments: false
+BinPackParameters: false
+AlignOperands: Align
+BreakBeforeBinaryOperators: None
+BreakBeforeTernaryOperators: true
+AlwaysBreakAfterReturnType: None
+
+# Preserve intentional phase/group separators and carefully grouped includes.
+MaxEmptyLinesToKeep: 1
+KeepEmptyLines:
+  AtStartOfBlock: false
+  AtStartOfFile: false
+  AtEndOfFile: false
+SeparateDefinitionBlocks: Leave
+EmptyLineBeforeAccessModifier: Leave
+EmptyLineAfterAccessModifier: Leave
+SortIncludes: Never
+IncludeBlocks: Preserve
+SortUsingDeclarations: Never
+ReflowComments: false
+FixNamespaceComments: false
+
+# Do not automatically force column alignment of independent statements.
+AlignConsecutiveAssignments: None
+AlignConsecutiveDeclarations: None
+AlignConsecutiveMacros: None
+AlignEscapedNewlines: DontAlign

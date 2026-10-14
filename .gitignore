@@ -1,0 +1,10 @@
+build/
+build-*/
+.cmake/
+.cache/
+*.user
+*.suo
+*.vcxproj.user
+__pycache__/
+*.pyc
+dist/

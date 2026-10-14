@@ -1,0 +1,72 @@
+#ifndef IDA_PLOT_WIDGET_H
+#define IDA_PLOT_WIDGET_H
+
+
+#include "cantordust/scalar_types.h"
+#include "cantordust/types.h"
+#include "cantordust/palette.h"
+#include "ida/navigation_gate.h"
+
+#include <QElapsedTimer>
+#include <QWheelEvent>
+#include <QtWidgets>
+
+#include <cstddef>
+#include <functional>
+#include <vector>
+
+namespace cantordust
+{
+
+class PlotWidget final : public QWidget
+{
+public:
+    explicit PlotWidget( QWidget* parent = nullptr );
+
+    void SetImage( Image_s image );
+    void SetPalette( Palette_e palette );
+    void SetHighlights( std::vector< QRect > highlights );
+    void SetViewMode( View_e mode );
+    void SetOnWheel(
+        std::function< void( usize, usize,
+            usize, int ) > callback );
+
+    void SetOnNavigate( std::function< void( usize ) > callback );
+    void SetOnHover( std::function< void( usize ) > callback );
+
+protected:
+    void paintEvent( QPaintEvent* event ) override;
+    void mousePressEvent( QMouseEvent* event ) override;
+    void mouseMoveEvent( QMouseEvent* event ) override;
+    void mouseReleaseEvent( QMouseEvent* event ) override;
+    void leaveEvent( QEvent* event ) override;
+    void wheelEvent( QWheelEvent* event ) override;
+
+private:
+    QRect TargetRect() const;
+    QRect MapImageRect( const QRect& imageRect, const QRect& target ) const;
+    usize SourceAt( const QPoint& position, QPoint* pixel ) const;
+    void UpdateHover( const QPoint& position );
+    void ClearHover();
+    void NavigateAt( const QPoint& position, bool force );
+
+    Palette_e m_palette = CDP_REFERENCE;
+    Image_s m_image;
+    std::vector< QRect > m_highlights;
+    View_e m_viewMode = CDV_HILBERT;
+    std::function< void( usize, usize,
+        usize, int ) > m_onWheel;
+
+    int m_wheelRemainder = 0;
+    QPoint m_hoverPixel{ -1, -1 };
+    usize m_hoverSource = CANTORDUST_NO_SOURCE;
+    std::function< void( usize ) > m_onNavigate;
+    std::function< void( usize ) > m_onHover;
+    NavigationGate m_navigationGate;
+    QElapsedTimer m_navigationClock;
+    bool m_dragging = false;
+};
+
+} // namespace cantordust
+
+#endif // IDA_PLOT_WIDGET_H
