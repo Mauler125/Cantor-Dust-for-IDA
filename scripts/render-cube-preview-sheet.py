@@ -45,6 +45,16 @@ def parse_args() -> argparse.Namespace:
         default=100.0,
         help="Point size percentage for the renderer",
     )
+    parser.add_argument("--auto-brightness", action="store_true",
+                        help="Enable adaptive exposure")
+    parser.add_argument("--value-mode", type=int, default=0,
+                        help="Cube value mode index (0-20)")
+    parser.add_argument("--stride", type=int, default=0,
+                        help="Stride in bytes (0 = mode default)")
+    parser.add_argument("--alignment", type=int, default=0,
+                        help="Byte-offset alignment")
+    parser.add_argument("--bit-plane", type=int, default=0,
+                        help="Bit index for bit-plane mode (0-7)")
     return parser.parse_args()
 
 
@@ -95,6 +105,11 @@ def main() -> int:
         str(args.palette_index),
         str(args.brightness_percent),
         str(args.size_percent),
+        "1" if args.auto_brightness else "0",
+        str(args.value_mode),
+        str(args.stride),
+        str(args.alignment),
+        str(args.bit_plane),
     ]
     subprocess.run(command, check=True)
 

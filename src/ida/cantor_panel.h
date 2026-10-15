@@ -187,6 +187,9 @@ private:
     QCheckBox* const m_antiAliasingToggle;
     QComboBox* const m_cubeGeometryBox;
     QComboBox* const m_cubeValuesBox;
+    QSpinBox* const m_cubeStrideEdit;
+    QSpinBox* const m_cubeAlignmentEdit;
+    QSpinBox* const m_cubeBitPlaneEdit;
     QSlider* const m_cubeSizeSlider;
     QSlider* const m_cubeBrightnessSlider;
     QCheckBox* const m_cubeAutoBrightnessToggle;

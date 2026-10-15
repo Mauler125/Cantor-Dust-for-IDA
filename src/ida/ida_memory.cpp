@@ -205,89 +205,103 @@ std::vector< CubeTriplet_s > Ida_ReadCubeOverviewRanges(
     const std::vector< ByteRange_s >& ranges,
     const u64 offset,
     const u64 span,
-    const usize maximumSamples, const CubeValueMode_e valueMode )
+    const usize maximumSamples, const CubeValueMode_e valueMode,
+    const usize requestedStride, const usize alignment,
+    const unsigned int bitPlane )
 {
     std::vector< CubeTriplet_s > triplets;
-
     const u64 total = Math_RangeLength( ranges );
-
-    if ( offset >= total || maximumSamples == 0 )
-    {
+    if ( offset >= total || maximumSamples == 0 ||
+         valueMode < CCV_U8 || valueMode >= CCV_COUNT || bitPlane > 7u )
         return triplets;
-    }
 
     const u64 count = std::min( span, total - offset );
-    const usize sampleLength = Cube_SampleLength( valueMode );
-
-    if ( count < sampleLength )
-    {
+    const u64 sampleLength = Cube_SampleLength( valueMode );
+    const u64 stride = requestedStride == 0 ?
+        Cube_DefaultStride( valueMode ) : requestedStride;
+    if ( count < sampleLength || stride == 0 )
         return triplets;
-    }
 
-    const usize samples = static_cast< usize >(
-        std::min< u64 >(
-            count - sampleLength + 1, std::min< usize >( maximumSamples, 65536 ) ) );
+    const u64 first = Cube_FirstAligned( offset, stride, alignment );
+    if ( first < offset || first - offset > count - sampleLength )
+        return triplets;
 
+    const u64 slotCount = 1u + ( count - sampleLength - ( first - offset ) ) / stride;
+    const usize samples = static_cast< usize >( std::min< u64 >(
+        slotCount, std::min< usize >( maximumSamples, 65536 ) ) );
     triplets.reserve( samples );
+
+    struct FloatSample_s { f32 x, y, z; usize outputIndex; };
+    std::vector< FloatSample_s > floatSamples;
+    CubeFloatScale_s histogram;
+    if ( Cube_IsFloatMode( valueMode ) )
+        floatSamples.reserve( samples );
 
     for ( usize i = 0; i < samples; ++i )
     {
-        const u64 logical = offset + Math_ScaledPosition(
-            count - sampleLength, static_cast< u32 >( i ),
-            static_cast< u32 >( samples - 1 ) );
+        const u64 sampleNumber = Math_ScaledPosition(
+            slotCount - 1u, static_cast< u32 >( i ),
+            static_cast< u32 >( samples - 1u ) );
+        const u64 logical = first + sampleNumber * stride;
 
-        // A color byte and its coordinate triplet share one segment.
+        // Never interpret a scalar or triplet across logical segment joins.
         const auto it = std::upper_bound( ranges.begin(), ranges.end(),
-            logical, []( const u64 value,
-                        const ByteRange_s& range ) {
+            logical, []( const u64 value, const ByteRange_s& range ) {
                 return value < range.offset;
             } );
-
         if ( it == ranges.begin() )
-        {
             continue;
-        }
 
         const ByteRange_s& range = *( it - 1 );
-
         if ( logical < range.offset ||
              logical - range.offset >= range.length ||
              range.length - ( logical - range.offset ) < sampleLength )
-        {
             continue;
-        }
 
         const ea_t address = static_cast< ea_t >(
             range.address + logical - range.offset );
-
-        u8 bytes[ 13 ]{};
+        u8 bytes[ 24 ]{};
         bool valid = true;
-
         for ( usize j = 0; j < sampleLength; ++j )
         {
             const ea_t byteAddress = address + static_cast< ea_t >( j );
-
             if ( !is_loaded( byteAddress ) )
             {
                 valid = false;
                 break;
             }
-
             bytes[ j ] = get_db_byte( byteAddress );
         }
-
         if ( !valid )
             continue;
 
         CubeTriplet_s decoded;
-
-        if ( !Cube_DecodeTriplet( bytes, valueMode, decoded ) )
+        if ( !Cube_DecodeTriplet( bytes, valueMode, decoded, bitPlane ) )
             continue;
 
         decoded.sourceIndex = static_cast< usize >( logical );
+        if ( Cube_IsFloatMode( valueMode ) )
+        {
+            f32 x = 0.0f, y = 0.0f, z = 0.0f;
+            if ( !Cube_DecodeFloatTriplet( bytes, valueMode, x, y, z ) )
+                continue;
+            Cube_ObserveFloat( histogram, x, y, z );
+            floatSamples.push_back({ x, y, z, triplets.size() });
+        }
         triplets.push_back( decoded );
     }
 
+    if ( !floatSamples.empty() )
+    {
+        const f32 scale = Cube_FloatScale( histogram );
+        for ( const FloatSample_s& sample : floatSamples )
+        {
+            CubeTriplet_s& target = triplets[ sample.outputIndex ];
+            target.x = Cube_FloatCoordinate( sample.x, scale );
+            target.y = Cube_FloatCoordinate( sample.y, scale );
+            target.z = Cube_FloatCoordinate( sample.z, scale );
+        }
+    }
     return triplets;
 }
 

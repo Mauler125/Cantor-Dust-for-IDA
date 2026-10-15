@@ -11,6 +11,8 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
+#include <limits>
 #include <iostream>
 #include <map>
 
@@ -268,6 +270,75 @@ static void Tests_CubeIntegerOverview()
         ranges, 12, 6, 8, cantordust::CCV_U32_LE ).empty() );
 }
 
+static void Tests_CubeSamplingModesAndAlignment()
+{
+    using namespace cantordust;
+    std::vector< ByteRange_s > ranges;
+    assert( Math_AddRange( ranges, 0xE000u, 20 ) );
+    assert( Math_AddRange( ranges, 0xF000u, 20 ) );
+    g_loadedBytes.clear();
+    for ( usize i = 0; i < 20; ++i )
+    {
+        g_loadedBytes[ 0xE000u + i ] = static_cast< u8 >( i + 1u );
+        g_loadedBytes[ 0xF000u + i ] = static_cast< u8 >( i + 21u );
+    }
+
+    // Offset alignment is relative to the entire logical range, not the
+    // currently visible window. A decoded record may not cross a range join.
+    const auto aligned = Ida_ReadCubeOverviewRanges(
+        ranges, 5, 34, 64, CCV_XOR8, 7, 3 );
+    assert( !aligned.empty() );
+    for ( const auto& record : aligned )
+    {
+        assert( record.sourceIndex % 7 == 3 );
+        assert( record.sourceIndex != 17 && record.sourceIndex != 18 &&
+            record.sourceIndex != 19 );
+    }
+    // Other bit-plane positions change the actual decoded coordinates.
+    const auto bit0 = Ida_ReadCubeOverviewRanges(
+        ranges, 0, 20, 64, CCV_BIT_PLANE, 1, 0, 0 );
+    const auto bit7 = Ida_ReadCubeOverviewRanges(
+        ranges, 0, 20, 64, CCV_BIT_PLANE, 1, 0, 7 );
+    assert( !bit0.empty() && bit0.size() == bit7.size() );
+    assert( bit0[ 0 ].x == 0 && bit7[ 0 ].x == 0 );
+    assert( bit0[ 0 ].y == 255 && bit7[ 0 ].y == 0 );
+
+    const auto low64 = Ida_ReadCubeOverviewRanges(
+        ranges, 0, 40, 64, CCV_U64_LE_LOW );
+    assert( low64.empty() ); // 24 bytes must not span 20-byte segments.
+
+    std::vector< ByteRange_s > floats;
+    assert( Math_AddRange( floats, 0x11000u, 24 ) );
+    g_loadedBytes.clear();
+    const auto writeFloat = []( const ea_t where, const f32 value ) {
+        u32 bits = 0;
+        std::memcpy( &bits, &value, sizeof( bits ) );
+        for ( unsigned int i = 0; i < 4; ++i )
+            g_loadedBytes[ where + i ] =
+                static_cast< u8 >( bits >> ( 8u * i ) );
+    };
+    writeFloat( 0x11000u, 1.0f );
+    writeFloat( 0x11004u, 2.0f );
+    writeFloat( 0x11008u, 4.0f );
+    writeFloat( 0x1100Cu, -1.0f );
+    writeFloat( 0x11010u, -2.0f );
+    writeFloat( 0x11014u, -4.0f );
+
+    const auto normalized = Ida_ReadCubeOverviewRanges(
+        floats, 0, 24, 64, CCV_FLOAT32_LE, 12 );
+    assert( normalized.size() == 2 );
+    assert( normalized[ 0 ].sourceIndex == 0 &&
+        normalized[ 1 ].sourceIndex == 12 );
+    assert( normalized[ 0 ].x > 128 && normalized[ 1 ].x < 128 );
+    assert( normalized[ 0 ].z > normalized[ 0 ].x );
+
+    writeFloat( 0x11000u, std::numeric_limits< f32 >::infinity() );
+    const auto invalid = Ida_ReadCubeOverviewRanges(
+        floats, 0, 24, 64, CCV_FLOAT32_LE, 12 );
+    assert( invalid.size() == 1 );
+    assert( invalid[ 0 ].sourceIndex == 12 );
+}
+
 static void Tests_ByteWidth()
 {
     g_bitsPerByte = 8;
@@ -487,6 +558,7 @@ int main()
     Tests_BoundedOverviewSampling();
     Tests_ReadCubeOverview();
     Tests_CubeIntegerOverview();
+    Tests_CubeSamplingModesAndAlignment();
     Tests_ByteWidth();
     Tests_RangeReadsAcrossGaps();
     Tests_LargeDetailSelectionSamplesEntireRange();

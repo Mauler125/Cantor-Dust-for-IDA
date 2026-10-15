@@ -221,6 +221,10 @@ if(BUILD_TESTING)
     target_link_libraries(cantordust_cube_modes_tests PRIVATE cantordust_core)
     add_test(NAME cube_modes COMMAND cantordust_cube_modes_tests)
 
+    add_executable(cantordust_cube_sampling_tests tests/cube_sampling_tests.cpp)
+    target_link_libraries(cantordust_cube_sampling_tests PRIVATE cantordust_core)
+    add_test(NAME cube_sampling_extended COMMAND cantordust_cube_sampling_tests)
+
     add_executable(cantordust_universe_filter_tests
         tests/universe_filter_tests.cpp)
     target_link_libraries(cantordust_universe_filter_tests
@@ -264,6 +268,9 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/src/public
     )
     target_link_libraries(cantordust_ida_memory_mock_tests PRIVATE cantordust_core)
+    # Qt defines `slots` as a macro in the native plugin. Mirror that in
+    # the portable IDA memory mock so local identifier collisions fail CI.
+    target_compile_definitions(cantordust_ida_memory_mock_tests PRIVATE slots=)
     add_test(NAME ida_memory_mock COMMAND cantordust_ida_memory_mock_tests)
 
     add_test(NAME qt_namespace_accept

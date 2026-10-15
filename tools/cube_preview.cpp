@@ -76,11 +76,13 @@ bool LoadBytes( const char* const path, std::vector< ByteCell_s >& bytes )
 
 int main( const int argc, const char* const* const argv )
 {
-    if ( argc < 3 || argc > 7 )
+    if ( argc < 3 || argc > 11 )
     {
         std::cerr << "Usage: cantordust_cube_preview <binary-file> "
                   << "<output-prefix> [palette-index 0-15] "
-                  << "[brightness-percent] [size-percent] [auto-brightness 0|1]\n";
+                  << "[brightness-percent] [size-percent] [auto-brightness 0|1] "
+                  << "[value-mode 0-20] [stride 0-4096] [alignment 0-4095] "
+                  << "[bit-plane 0-7]\n";
         return 1;
     }
 
@@ -88,6 +90,10 @@ int main( const int argc, const char* const* const argv )
     float brightnessPercent = 160.0f;
     float sizePercent = 100.0f;
     bool autoBrightness = false;
+    int selectedMode = CCV_U8;
+    usize stride = 0;
+    usize alignment = 0;
+    unsigned int bitPlane = 0;
 
     if ( argc >= 4 )
     {
@@ -147,6 +153,42 @@ int main( const int argc, const char* const* const argv )
         autoBrightness = value != 0;
     }
 
+    if ( argc >= 8 )
+    {
+        char* end = nullptr;
+        const long value = std::strtol( argv[ 7 ], &end, 10 );
+        if ( end == argv[ 7 ] || *end != '\0' || value < 0 ||
+             value >= CCV_COUNT )
+        {
+            std::cerr << "Invalid value mode\n";
+            return 1;
+        }
+        selectedMode = static_cast< int >( value );
+    }
+
+    const auto ParseSetting = [&]( const int index, const long maximum,
+                                   const char* const name, usize& output ) {
+        if ( argc <= index )
+            return true;
+        char* end = nullptr;
+        const long value = std::strtol( argv[ index ], &end, 10 );
+        if ( end == argv[ index ] || *end != '\0' || value < 0 ||
+             value > maximum )
+        {
+            std::cerr << "Invalid " << name << "\n";
+            return false;
+        }
+        output = static_cast< usize >( value );
+        return true;
+    };
+
+    usize selectedBitPlane = 0;
+    if ( !ParseSetting( 8, 4096, "stride", stride ) ||
+         !ParseSetting( 9, 4095, "alignment", alignment ) ||
+         !ParseSetting( 10, 7, "bit-plane", selectedBitPlane ) )
+        return 1;
+    bitPlane = static_cast< unsigned int >( selectedBitPlane );
+
     std::vector< ByteCell_s > bytes;
     if ( !LoadBytes( argv[ 1 ], bytes ) )
     {
@@ -155,7 +197,10 @@ int main( const int argc, const char* const* const argv )
     }
 
     const Palette_e palette = static_cast< Palette_e >( selected );
-    const CubeCloud_s cloud = Cube_BuildCloud( bytes, palette );
+    const CubeCloud_s cloud = Cube_BuildCloud( bytes, palette,
+        CANTORDUST_CUBE_MAX_POINTS, {},
+        static_cast< CubeValueMode_e >( selectedMode ), stride,
+        alignment, bitPlane );
 
     if ( cloud.points.empty() )
     {

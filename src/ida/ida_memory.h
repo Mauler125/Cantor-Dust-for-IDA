@@ -43,7 +43,8 @@ std::vector< CubeTriplet_s > Ida_ReadCubeOverviewRanges(
     const std::vector< ByteRange_s >& ranges,
     u64 offset, u64 span,
     usize maximumSamples = 65536,
-    CubeValueMode_e valueMode = CCV_U8 );
+    CubeValueMode_e valueMode = CCV_U8,
+    usize stride = 0, usize alignment = 0, unsigned int bitPlane = 0 );
 
 IdaOverview_s Ida_ReadOverview( ea_t address, u64 count );
 IdaOverview_s Ida_ReadOverviewRanges(

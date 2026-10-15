@@ -120,6 +120,9 @@ QJsonObject CantorPanel::CaptureInvestigation() const
     item.insert( "minOutgoing", m_filterMinimumOutgoing->value() );
     item.insert( "cubeGeometry", m_cubeGeometryBox->currentIndex() );
     item.insert( "cubeValues", m_cubeValuesBox->currentIndex() );
+    item.insert( "cubeStride", m_cubeStrideEdit->value() );
+    item.insert( "cubeAlignment", m_cubeAlignmentEdit->value() );
+    item.insert( "cubeBitPlane", m_cubeBitPlaneEdit->value() );
     item.insert( "cubePointSize", m_cubeSizeSlider->value() );
     item.insert( "cubeBrightness", m_cubeBrightnessSlider->value() );
     item.insert( "cubeAutoBrightness", m_cubeAutoBrightnessToggle->isChecked() );
@@ -266,6 +269,9 @@ bool CantorPanel::RestoreInvestigation( const QJsonObject& item )
     {
         const QSignalBlocker geometryBlock( m_cubeGeometryBox );
         const QSignalBlocker valuesBlock( m_cubeValuesBox );
+        const QSignalBlocker strideBlock( m_cubeStrideEdit );
+        const QSignalBlocker alignmentBlock( m_cubeAlignmentEdit );
+        const QSignalBlocker bitPlaneBlock( m_cubeBitPlaneEdit );
         const QSignalBlocker sizeBlock( m_cubeSizeSlider );
         const QSignalBlocker brightnessBlock( m_cubeBrightnessSlider );
         const QSignalBlocker autoBrightnessBlock( m_cubeAutoBrightnessToggle );
@@ -273,7 +279,16 @@ bool CantorPanel::RestoreInvestigation( const QJsonObject& item )
             item.value( "cubeGeometry" ).toInt( m_cubeGeometryBox->currentIndex() ), 0, 3 ) );
 
         m_cubeValuesBox->setCurrentIndex( std::clamp(
-            item.value( "cubeValues" ).toInt( m_cubeValuesBox->currentIndex() ), 0, 6 ) );
+            item.value( "cubeValues" ).toInt( m_cubeValuesBox->currentIndex() ),
+            0, static_cast< int >( CCV_COUNT ) - 1 ) );
+        m_cubeStrideEdit->setValue( std::clamp(
+            item.value( "cubeStride" ).toInt( m_cubeStrideEdit->value() ), 0, 4096 ) );
+        m_cubeAlignmentEdit->setValue( std::clamp(
+            item.value( "cubeAlignment" ).toInt( m_cubeAlignmentEdit->value() ), 0, 4095 ) );
+        m_cubeBitPlaneEdit->setValue( std::clamp(
+            item.value( "cubeBitPlane" ).toInt( m_cubeBitPlaneEdit->value() ), 0, 7 ) );
+        m_cubeBitPlaneEdit->setEnabled(
+            m_cubeValuesBox->currentIndex() == CCV_BIT_PLANE );
 
         m_cubeSizeSlider->setValue( std::clamp(
             item.value( "cubePointSize" ).toInt( m_cubeSizeSlider->value() ), 50, 200 ) );
@@ -304,6 +319,9 @@ bool CantorPanel::RestoreInvestigation( const QJsonObject& item )
     preferences.setValue( "advancedMinimumOutgoing", m_filterMinimumOutgoing->value() );
     preferences.setValue( "cubeGeometry", m_cubeGeometryBox->currentIndex() );
     preferences.setValue( "cubeValues", m_cubeValuesBox->currentIndex() );
+    preferences.setValue( "cubeStride", m_cubeStrideEdit->value() );
+    preferences.setValue( "cubeAlignment", m_cubeAlignmentEdit->value() );
+    preferences.setValue( "cubeBitPlane", m_cubeBitPlaneEdit->value() );
     preferences.setValue( "cubePointSize", m_cubeSizeSlider->value() );
     preferences.setValue( "cubeBrightness", m_cubeBrightnessSlider->value() );
     preferences.setValue( "cubeAutoBrightness", m_cubeAutoBrightnessToggle->isChecked() );

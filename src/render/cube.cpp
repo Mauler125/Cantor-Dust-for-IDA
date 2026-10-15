@@ -12,6 +12,7 @@
     CANTORDUST_CUBE_GRID * CANTORDUST_CUBE_GRID )
 
 #include <array>
+#include <cstring>
 
 namespace cantordust
 {
@@ -21,29 +22,172 @@ using std::sin;
 using std::cos;
 using std::sqrt;
 
+bool Cube_IsFloatMode( const CubeValueMode_e mode )
+{
+    return mode == CCV_FLOAT32_LE || mode == CCV_FLOAT32_BE;
+}
+
 usize Cube_SampleLength( const CubeValueMode_e mode )
 {
-    return mode == CCV_U16_LE || mode == CCV_U16_BE ? 6u :
-           mode == CCV_U32_LE || mode == CCV_U32_BE ? 12u : 4u;
+    switch ( mode )
+    {
+    case CCV_U16_LE: case CCV_U16_BE:
+    case CCV_U16_LE_LOW: case CCV_U16_BE_LOW: return 6u;
+    case CCV_U32_LE: case CCV_U32_BE:
+    case CCV_U32_LE_LOW: case CCV_U32_BE_LOW:
+    case CCV_FLOAT32_LE: case CCV_FLOAT32_BE: return 12u;
+    case CCV_U64_LE: case CCV_U64_BE:
+    case CCV_U64_LE_LOW: case CCV_U64_BE_LOW: return 24u;
+    default: return 4u;
+    }
+}
+
+usize Cube_DefaultStride( const CubeValueMode_e mode )
+{
+    const usize length = Cube_SampleLength( mode );
+    return length == 24u ? 8u : length == 12u ? 4u :
+        length == 6u ? 2u : 1u;
+}
+
+u64 Cube_FirstAligned( const u64 start, const u64 stride, const u64 alignment )
+{
+    if ( stride == 0 )
+        return start;
+
+    const u64 desired = alignment % stride;
+    const u64 remainder = start % stride;
+    const u64 delta = desired >= remainder ? desired - remainder :
+        stride - ( remainder - desired );
+    return delta > UINT64_MAX - start ? UINT64_MAX : start + delta;
+}
+
+static bool Cube_ReadFloat( const u8* const bytes,
+    const bool bigEndian, f32& value )
+{
+    u32 bits = 0;
+
+    for ( unsigned int i = 0; i < 4u; ++i )
+        bits |= static_cast< u32 >( bytes[ i ] ) <<
+            ( bigEndian ? 8u * ( 3u - i ) : 8u * i );
+
+    static_assert( sizeof( f32 ) == sizeof( u32 ), "Float32 required" );
+    std::memcpy( &value, &bits, sizeof( value ) );
+    return std::isfinite( value );
+}
+
+bool Cube_DecodeFloatTriplet( const u8* const bytes,
+    const CubeValueMode_e mode, f32& x, f32& y, f32& z )
+{
+    if ( bytes == nullptr || !Cube_IsFloatMode( mode ) )
+        return false;
+
+    const bool big = mode == CCV_FLOAT32_BE;
+    return Cube_ReadFloat( bytes, big, x ) &&
+        Cube_ReadFloat( bytes + 4, big, y ) &&
+        Cube_ReadFloat( bytes + 8, big, z );
+}
+
+void Cube_ObserveFloat( CubeFloatScale_s& scale,
+    const f32 x, const f32 y, const f32 z )
+{
+    for ( const f32 value : { x, y, z } )
+    {
+        if ( value == 0.0f || !std::isfinite( value ) )
+            continue;
+
+        int exponent = 0;
+        std::frexp( std::abs( value ), &exponent );
+        const usize index = static_cast< usize >(
+            std::clamp( exponent + 149, 0, 279 ) );
+        ++scale.histogram[ index ];
+        ++scale.samples;
+    }
+}
+
+f32 Cube_FloatScale( const CubeFloatScale_s& scale )
+{
+    if ( scale.samples == 0 )
+        return 1.0f;
+
+    // The 97th percentile avoids allowing rare exponent outliers to
+    // flatten every ordinary coordinate. The same scale is used on XYZ.
+    const u64 target = scale.samples - scale.samples / 33u;
+    u64 total = 0;
+
+    for ( usize index = 0; index < scale.histogram.size(); ++index )
+    {
+        total += scale.histogram[ index ];
+        if ( total >= target )
+        {
+            const int exponent = static_cast< int >( index ) - 149;
+            return std::clamp( std::ldexp( 1.0f, exponent ),
+                std::numeric_limits< f32 >::denorm_min(),
+                std::numeric_limits< f32 >::max() );
+        }
+    }
+    return 1.0f;
+}
+
+u8 Cube_FloatCoordinate( const f32 value, const f32 scale )
+{
+    // Divide in double precision to remain finite for the full f32 range.
+    const f64 normalized = static_cast< f64 >( value ) /
+        static_cast< f64 >( scale );
+    return static_cast< u8 >( std::clamp( 127.5 + 127.5 * normalized,
+        0.0, 255.0 ) + 0.5 );
 }
 
 bool Cube_DecodeTriplet( const u8* const bytes,
-    const CubeValueMode_e mode, CubeTriplet_s& result )
+    const CubeValueMode_e mode, CubeTriplet_s& result,
+    const unsigned int bitPlane, const f32 floatScale )
 {
-    if ( bytes == nullptr || mode < CCV_U8 || mode > CCV_POPCOUNT8 )
+    if ( bytes == nullptr || mode < CCV_U8 || mode >= CCV_COUNT ||
+         bitPlane > 7u )
         return false;
 
-    const unsigned int width = mode == CCV_U16_LE || mode == CCV_U16_BE ? 2u :
-        mode == CCV_U32_LE || mode == CCV_U32_BE ? 4u : 1u;
+    if ( Cube_IsFloatMode( mode ) )
+    {
+        f32 x = 0.0f, y = 0.0f, z = 0.0f;
+        if ( !Cube_DecodeFloatTriplet( bytes, mode, x, y, z ) )
+            return false;
+        result = { Cube_FloatCoordinate( x, floatScale ),
+            Cube_FloatCoordinate( y, floatScale ),
+            Cube_FloatCoordinate( z, floatScale ), bytes[ 0 ] };
+        return true;
+    }
 
-    const bool big = mode == CCV_U16_BE || mode == CCV_U32_BE;
-    auto decode = [&]( const unsigned int offset ) -> u8 {
+    if ( mode == CCV_NIBBLE8 )
+    {
+        result = { static_cast< u8 >( ( bytes[ 1 ] >> 4 ) * 17u ),
+            static_cast< u8 >( ( bytes[ 1 ] & 0xFu ) * 17u ),
+            static_cast< u8 >( ( bytes[ 2 ] >> 4 ) * 17u ), bytes[ 0 ] };
+        return true;
+    }
+
+    const unsigned int width = static_cast< unsigned int >(
+        Cube_DefaultStride( mode ) );
+    const bool big = mode == CCV_U16_BE || mode == CCV_U32_BE ||
+        mode == CCV_U64_BE || mode == CCV_U16_BE_LOW ||
+        mode == CCV_U32_BE_LOW || mode == CCV_U64_BE_LOW;
+    const bool low = mode == CCV_U16_LE_LOW || mode == CCV_U16_BE_LOW ||
+        mode == CCV_U32_LE_LOW || mode == CCV_U32_BE_LOW ||
+        mode == CCV_U64_LE_LOW || mode == CCV_U64_BE_LOW;
+
+    const auto decode = [&]( const unsigned int offset ) -> u8 {
         if ( mode == CCV_DELTA8 )
             return static_cast< u8 >( bytes[ offset ] - bytes[ offset - 1u ] );
-
+        if ( mode == CCV_SIGNED_DELTA8 )
+        {
+            const int delta = static_cast< int >( bytes[ offset ] ) -
+                static_cast< int >( bytes[ offset - 1u ] );
+            return static_cast< u8 >( ( delta + 255 ) / 2 );
+        }
+        if ( mode == CCV_XOR8 )
+            return bytes[ offset ] ^ bytes[ offset - 1u ];
+        if ( mode == CCV_BIT_PLANE )
+            return ( bytes[ offset ] & ( 1u << bitPlane ) ) ? 255u : 0u;
         if ( mode == CCV_POPCOUNT8 )
         {
-            // The scaling matches the original integer division exactly.
             static constexpr auto counts = []() constexpr {
                 std::array< u8, 256 > table{};
                 for ( unsigned int byte = 0; byte < table.size(); ++byte )
@@ -61,15 +205,15 @@ bool Cube_DecodeTriplet( const u8* const bytes,
             }();
             return counts[ bytes[ offset ] ];
         }
-        // High byte represents the most significant 8 bits of u16/u32.
-        return bytes[ offset + ( big ? 0u : width - 1u ) ];
+        const unsigned int index = big
+            ? ( low ? width - 1u : 0u )
+            : ( low ? 0u : width - 1u );
+        return bytes[ offset + index ];
     };
 
     const unsigned int first = width == 1u ? 1u : 0u;
-    result.x = decode( first );
-    result.y = decode( first + width );
-    result.z = decode( first + 2u * width );
-    result.colorByte = bytes[ 0 ];
+    result = { decode( first ), decode( first + width ),
+        decode( first + 2u * width ), bytes[ 0 ] };
     return true;
 }
 
@@ -170,61 +314,84 @@ CubeCloud_s Cube_BuildCloud(
     const Palette_e palette,
     const usize maximumPoints,
     const std::vector< usize >& boundaryOffsets,
-    const CubeValueMode_e mode )
+    const CubeValueMode_e mode,
+    const usize requestedStride,
+    const usize alignment,
+    const unsigned int bitPlane,
+    const u64 logicalOffset )
 {
     CubeCloud_s cloud;
+    if ( mode < CCV_U8 || mode >= CCV_COUNT || bitPlane > 7u )
+        return cloud;
 
     const usize sampleLength = Cube_SampleLength( mode );
-
     if ( cells.size() < sampleLength || maximumPoints == 0 )
-    {
         return cloud;
+
+    const usize stride = requestedStride == 0
+        ? Cube_DefaultStride( mode ) : requestedStride;
+    if ( stride == 0 )
+        return cloud;
+
+    const u64 first = Cube_FirstAligned( logicalOffset, stride, alignment );
+    if ( first < logicalOffset || first - logicalOffset >
+         cells.size() - sampleLength )
+        return cloud;
+
+    const usize begin = static_cast< usize >( first - logicalOffset );
+    // Reuse identical validation and boundary rules for both float-scale
+    // analysis and cloud accumulation. This avoids an extra sample buffer.
+    const auto scan = [&]( auto&& accept ) {
+        usize boundary = 0;
+        for ( usize i = begin; i <= cells.size() - sampleLength; )
+        {
+            while ( boundary < boundaryOffsets.size() &&
+                    boundaryOffsets[ boundary ] <= i )
+                ++boundary;
+
+            if ( boundary == boundaryOffsets.size() ||
+                 boundaryOffsets[ boundary ] >= i + sampleLength )
+            {
+                u8 bytes[ 24 ]{};
+                bool valid = true;
+                for ( usize j = 0; j < sampleLength; ++j )
+                {
+                    if ( V_UNLIKELY( !cells[ i + j ].valid ) )
+                    {
+                        valid = false;
+                        break;
+                    }
+                    bytes[ j ] = cells[ i + j ].value;
+                }
+                if ( valid )
+                    accept( bytes, i );
+            }
+            if ( stride > cells.size() - sampleLength - i )
+                break;
+            i += stride;
+        }
+    };
+
+    f32 floatScale = 1.0f;
+    if ( Cube_IsFloatMode( mode ) )
+    {
+        CubeFloatScale_s histogram;
+        scan( [&]( const u8* bytes, const usize ) {
+            f32 x = 0.0f, y = 0.0f, z = 0.0f;
+            if ( Cube_DecodeFloatTriplet( bytes, mode, x, y, z ) )
+                Cube_ObserveFloat( histogram, x, y, z );
+        } );
+        floatScale = Cube_FloatScale( histogram );
     }
 
     std::vector< CubeAccumulator_s > bins( CANTORDUST_CUBE_VOXELS );
-    usize boundary = 0;
-
-    const usize stride = sampleLength == 12 ? 4u : sampleLength == 6 ? 2u : 1u;
-
-    for ( usize i = 0; i + sampleLength <= cells.size(); i += stride )
-    {
-        while ( boundary < boundaryOffsets.size() &&
-                boundaryOffsets[ boundary ] <= i )
-        {
-            ++boundary;
-        }
-
-        if ( boundary < boundaryOffsets.size() &&
-             boundaryOffsets[ boundary ] < i + sampleLength )
-        {
-            continue;
-        }
-
-        bool valid = true;
-        u8 bytes[ 13 ]{};
-
-        for ( usize j = 0; j < sampleLength; ++j )
-        {
-            if ( V_UNLIKELY( !cells[ i + j ].valid ) )
-            {
-                valid = false;
-                break;
-            }
-
-            bytes[ j ] = cells[ i + j ].value;
-        }
-
-        if ( !valid )
-            continue;
-
+    scan( [&]( const u8* bytes, const usize i ) {
         CubeTriplet_s decoded;
-
-        if ( !Cube_DecodeTriplet( bytes, mode, decoded ) )
-            continue;
-
-        Cube_Accumulate( bins, cloud, decoded.x, decoded.y, decoded.z,
-            decoded.colorByte, i );
-    }
+        if ( Cube_DecodeTriplet( bytes, mode, decoded,
+                bitPlane, floatScale ) )
+            Cube_Accumulate( bins, cloud, decoded.x, decoded.y, decoded.z,
+                decoded.colorByte, i );
+    } );
 
     Cube_FinishCloud( cloud, bins, palette, maximumPoints );
     return cloud;

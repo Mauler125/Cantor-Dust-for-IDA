@@ -11,10 +11,17 @@ foreach(_text IN ITEMS
     "root->addWidget( m_supplementalFeatures )"
     "m_cubeGeometryBox->addItems"
     "m_cubeValuesBox->addItems"
+    "m_cubeStrideEdit->setRange( 0, 4096 )"
+    "m_cubeAlignmentEdit->setRange( 0, 4095 )"
+    "m_cubeBitPlaneEdit->setRange( 0, 7 )"
+    "m_cubeBitPlaneEdit->setEnabled("
+    "preferences.setValue( \"cubeStride\""
+    "preferences.setValue( \"cubeAlignment\""
+    "preferences.setValue( \"cubeBitPlane\""
     "cubeAppearanceRow->addWidget( m_cubeSizeSlider, 1 )"
     "cubeAppearanceRow->addWidget( m_cubeBrightnessSlider, 1 )"
     "cubeAppearanceRow->addWidget( resetCube )"
-    "QSettings( \"CantorDust\", \"IDA\" ).setValue( \"cubeValues\", value )"
+    "preferences.setValue( \"cubeValues\", m_cubeValuesBox->currentIndex() )"
     "preferences.setValue( \"cubeGeometry\""
     "preferences.setValue( \"cubePointSize\""
     "preferences.setValue( \"cubeBrightness\""
@@ -65,6 +72,13 @@ string(FIND "${_menus}" "3D &Byte Cloud Controls" _pos)
 if(NOT _pos EQUAL -1)
     message(FATAL_ERROR "View menu still exposes redundant 3D Byte Controls")
 endif()
+
+foreach(_field IN ITEMS cubeStride cubeAlignment cubeBitPlane)
+    string(FIND "${_bookmarks}" "item.insert( \"${_field}\"" _pos)
+    if(_pos EQUAL -1)
+        message(FATAL_ERROR "New cube setting is missing from bookmarks: ${_field}")
+    endif()
+endforeach()
 
 string(FIND "${_bookmarks}" "UpdateSupplementalFeatures();" _pos)
 if(_pos EQUAL -1)

@@ -171,6 +171,9 @@ CantorPanel::CantorPanel( QWidget* const parent )
     , m_antiAliasingToggle( new QCheckBox( "Anti-aliasing (3D universe)", this ) )
     , m_cubeGeometryBox( new QComboBox( m_cubeFeaturesPanel ) )
     , m_cubeValuesBox( new QComboBox( m_cubeFeaturesPanel ) )
+    , m_cubeStrideEdit( new QSpinBox( m_cubeFeaturesPanel ) )
+    , m_cubeAlignmentEdit( new QSpinBox( m_cubeFeaturesPanel ) )
+    , m_cubeBitPlaneEdit( new QSpinBox( m_cubeFeaturesPanel ) )
     , m_cubeSizeSlider( new QSlider( Qt::Horizontal, m_cubeFeaturesPanel ) )
     , m_cubeBrightnessSlider( new QSlider( Qt::Horizontal, m_cubeFeaturesPanel ) )
     , m_cubeAutoBrightnessToggle( new QCheckBox( "Auto", m_cubeFeaturesPanel ) )
@@ -462,16 +465,58 @@ CantorPanel::CantorPanel( QWidget* const parent )
     cubeSelectionRow->addWidget( new QLabel( "Values:", cubePage ) );
     m_cubeValuesBox->addItems( { "u8 (trigraph)", "u16 little endian",
         "u16 big endian", "u32 little endian", "u32 big endian",
-        "u8 difference", "u8 popcount" } );
+        "u8 difference", "u8 popcount", "u8 XOR", "u8 nibbles",
+        "f32 little endian", "f32 big endian", "u8 bit-plane",
+        "u16 little endian (low)", "u16 big endian (low)",
+        "u32 little endian (low)", "u32 big endian (low)",
+        "u8 signed difference", "u64 little endian",
+        "u64 big endian", "u64 little endian (low)",
+        "u64 big endian (low)" } );
     m_cubeValuesBox->setSizePolicy(
         QSizePolicy::Ignored, QSizePolicy::Fixed );
     m_cubeValuesBox->setMinimumWidth( 105 );
     m_cubeValuesBox->setToolTip(
-        "Integer modes sample three consecutive scalar values from the "
-        "navigable anchor; u16/u32 use the most significant byte per axis. "
-        "Byte differences and bit counts can reveal other structures." );
+        "Interpret consecutive binary values as XYZ coordinates. Integer "
+        "modes use the high or low byte of each scalar. Float32 modes "
+        "normalize finite XYZ triples to a shared robust scale. "
+        "XOR, difference, nibbles and bit-plane reveal bit patterns." );
     cubeSelectionRow->addWidget( m_cubeValuesBox, 1 );
     cubeLayout->addLayout( cubeSelectionRow );
+
+    // Keep sampling controls in a compact grid, independent of the value
+    // selector's width. Zero stride preserves each mode's original default.
+    QGridLayout* const cubeSamplingRow = new QGridLayout();
+    cubeSamplingRow->setContentsMargins( 0, 0, 0, 0 );
+    cubeSamplingRow->setHorizontalSpacing( 5 );
+    cubeSamplingRow->setVerticalSpacing( 3 );
+
+    m_cubeStrideEdit->setRange( 0, 4096 );
+    m_cubeStrideEdit->setSpecialValueText( "Auto" );
+    m_cubeStrideEdit->setToolTip(
+        "Sampling step in bytes; Auto uses 1, 2, 4 or 8 according "
+        "to the selected value mode." );
+
+    m_cubeAlignmentEdit->setRange( 0, 4095 );
+    m_cubeAlignmentEdit->setToolTip(
+        "Logical byte-offset alignment, modulo the effective stride. "
+        "The same alignment applies in Detail and Overview." );
+
+    m_cubeBitPlaneEdit->setRange( 0, 7 );
+    m_cubeBitPlaneEdit->setToolTip(
+        "Bit index (0-7) for the u8 bit-plane interpretation." );
+
+    cubeSamplingRow->addWidget( new QLabel( "Stride:", cubePage ), 0, 0 );
+    cubeSamplingRow->addWidget( m_cubeStrideEdit, 0, 1 );
+    cubeSamplingRow->addWidget( new QLabel( "Align:", cubePage ), 0, 2 );
+    cubeSamplingRow->addWidget( m_cubeAlignmentEdit, 0, 3 );
+    cubeSamplingRow->addWidget( new QLabel( "Bit:", cubePage ), 0, 4 );
+    cubeSamplingRow->addWidget( m_cubeBitPlaneEdit, 0, 5 );
+
+    cubeSamplingRow->setColumnStretch( 1, 1 );
+    cubeSamplingRow->setColumnStretch( 3, 1 );
+    cubeSamplingRow->setColumnStretch( 5, 1 );
+
+    cubeLayout->addLayout( cubeSamplingRow );
 
     QHBoxLayout* const cubeAppearanceRow = new QHBoxLayout();
     cubeAppearanceRow->setContentsMargins( 0, 0, 0, 0 );
@@ -520,6 +565,9 @@ CantorPanel::CantorPanel( QWidget* const parent )
     QObject::connect( resetCube, &QPushButton::clicked, this, [this]() {
         m_cubeGeometryBox->setCurrentIndex( 0 );
         m_cubeValuesBox->setCurrentIndex( 0 );
+        m_cubeStrideEdit->setValue( 0 );
+        m_cubeAlignmentEdit->setValue( 0 );
+        m_cubeBitPlaneEdit->setValue( 0 );
         m_cubeSizeSlider->setValue( 100 );
         m_cubeBrightnessSlider->setValue( 100 );
         m_cubeAutoBrightnessToggle->setChecked( true );
@@ -530,7 +578,15 @@ CantorPanel::CantorPanel( QWidget* const parent )
         cubeSettings.value( "cubeGeometry", 0 ).toInt(), 0, 3 ) );
 
     m_cubeValuesBox->setCurrentIndex( std::clamp(
-        cubeSettings.value( "cubeValues", 0 ).toInt(), 0, 6 ) );
+        cubeSettings.value( "cubeValues", 0 ).toInt(), 0,
+        static_cast< int >( CCV_COUNT ) - 1 ) );
+    m_cubeStrideEdit->setValue( std::clamp(
+        cubeSettings.value( "cubeStride", 0 ).toInt(), 0, 4096 ) );
+    m_cubeAlignmentEdit->setValue( std::clamp(
+        cubeSettings.value( "cubeAlignment", 0 ).toInt(), 0, 4095 ) );
+    m_cubeBitPlaneEdit->setValue( std::clamp(
+        cubeSettings.value( "cubeBitPlane", 0 ).toInt(), 0, 7 ) );
+    m_cubeBitPlaneEdit->setEnabled( m_cubeValuesBox->currentIndex() == CCV_BIT_PLANE );
 
     m_cubeSizeSlider->setValue( std::clamp(
         cubeSettings.value( "cubePointSize", 100 ).toInt(), 50, 200 ) );
@@ -573,16 +629,26 @@ CantorPanel::CantorPanel( QWidget* const parent )
     QObject::connect( m_cubeAutoBrightnessToggle, &QCheckBox::toggled,
         this, [updateCubeRender]( bool ) { updateCubeRender(); } );
 
-    QObject::connect( m_cubeValuesBox, QOverload<int>::of( &QComboBox::currentIndexChanged ),
-        this, [this]( int value ) {
-            QSettings( "CantorDust", "IDA" ).setValue( "cubeValues", value );
-            m_overviewCubeLoaded = false;
-            m_overviewImageDirty = true;
-            // Large cube views are sampled from the whole selected range.
-            // Changing the scalar decoder must regenerate those samples.
-            if ( m_totalLength != 0 )
-                Reload();
-        } );
+    const auto updateCubeSampling = [this]() {
+        QSettings preferences( "CantorDust", "IDA" );
+        preferences.setValue( "cubeValues", m_cubeValuesBox->currentIndex() );
+        preferences.setValue( "cubeStride", m_cubeStrideEdit->value() );
+        preferences.setValue( "cubeAlignment", m_cubeAlignmentEdit->value() );
+        preferences.setValue( "cubeBitPlane", m_cubeBitPlaneEdit->value() );
+        m_cubeBitPlaneEdit->setEnabled(
+            m_cubeValuesBox->currentIndex() == CCV_BIT_PLANE );
+        m_overviewCubeLoaded = false;
+        m_overviewImageDirty = true;
+        if ( m_totalLength != 0 )
+            Reload();
+    };
+    QObject::connect( m_cubeValuesBox,
+        QOverload<int>::of( &QComboBox::currentIndexChanged ),
+        this, [updateCubeSampling]( int ) { updateCubeSampling(); } );
+    for ( QSpinBox* const control : { m_cubeStrideEdit,
+            m_cubeAlignmentEdit, m_cubeBitPlaneEdit } )
+        QObject::connect( control, QOverload<int>::of( &QSpinBox::valueChanged ),
+            this, [updateCubeSampling]( int ) { updateCubeSampling(); } );
 
     updateCubeRender();
 

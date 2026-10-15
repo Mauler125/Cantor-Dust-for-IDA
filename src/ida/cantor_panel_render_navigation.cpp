@@ -156,7 +156,11 @@ void CantorPanel::RenderCurrent()
             m_cubePlot->SetCloud( Cube_BuildCloud(
                 m_cells, CurrentPalette(), CANTORDUST_CUBE_MAX_POINTS,
                 breaks, static_cast< CubeValueMode_e >(
-                    m_cubeValuesBox->currentIndex() ) ), CurrentPalette() );
+                    m_cubeValuesBox->currentIndex() ),
+                static_cast< usize >( m_cubeStrideEdit->value() ),
+                static_cast< usize >( m_cubeAlignmentEdit->value() ),
+                static_cast< unsigned int >( m_cubeBitPlaneEdit->value() ),
+                m_windowOffset ), CurrentPalette() );
         }
     }
     else
@@ -246,7 +250,10 @@ void CantorPanel::RenderOverview()
                 m_overviewTriplets = Ida_ReadCubeOverviewRanges(
                     m_ranges, m_overviewOffset, m_overviewSpan, 65536,
                     static_cast< CubeValueMode_e >(
-                        m_cubeValuesBox->currentIndex() ) );
+                        m_cubeValuesBox->currentIndex() ),
+                    static_cast< usize >( m_cubeStrideEdit->value() ),
+                    static_cast< usize >( m_cubeAlignmentEdit->value() ),
+                    static_cast< unsigned int >( m_cubeBitPlaneEdit->value() ) );
 
                 m_overviewCubeLoaded = true;
             }

@@ -708,7 +708,10 @@ void CantorPanel::Reload()
         m_detailCubeTriplets = Ida_ReadCubeOverviewRanges(
             m_ranges, m_windowOffset, m_detailSpan, 65536,
             static_cast< CubeValueMode_e >(
-                m_cubeValuesBox->currentIndex() ) );
+                m_cubeValuesBox->currentIndex() ),
+            static_cast< usize >( m_cubeStrideEdit->value() ),
+            static_cast< usize >( m_cubeAlignmentEdit->value() ),
+            static_cast< unsigned int >( m_cubeBitPlaneEdit->value() ) );
 
         m_cells.clear();
         m_byteCount = m_detailCubeTriplets.size();
