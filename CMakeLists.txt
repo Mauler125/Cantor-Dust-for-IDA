@@ -21,7 +21,35 @@ if(CANTORDUST_BUILD_IDA_PLUGIN)
         "IDA SDK source directory (containing include/pro.h)" FORCE)
     set(ENV{IDASDK} "${IDASDK}")
     message(STATUS "CantorDust SDK source directory: ${IDASDK}")
-    include("${IDASDK}/cmake/idasdk_init.cmake")
+    if(EXISTS "${IDASDK}/cmake/idasdk_init.cmake")
+        include("${IDASDK}/cmake/idasdk_init.cmake")
+        set(CANTORDUST_LEGACY_SDK OFF)
+    else()
+        set(CANTORDUST_LEGACY_SDK ON)
+    endif()
+    file(STRINGS "${IDASDK}/include/pro.h" _cd_sdk_version_line
+        REGEX "^#[ \t]*define[ \t]+IDA_SDK_VERSION[ \t]+[0-9]+")
+    if(NOT _cd_sdk_version_line MATCHES "IDA_SDK_VERSION[ \t]+([0-9]+)")
+        message(FATAL_ERROR "Cannot identify SDK version in ${IDASDK}/include/pro.h")
+    endif()
+    set(CANTORDUST_SDK_VERSION_NUM "${CMAKE_MATCH_1}")
+    if(CANTORDUST_SDK_VERSION_NUM LESS 920)
+        message(FATAL_ERROR "Cantor Dust native builds require SDK 9.2 or newer")
+    endif()
+    if(CANTORDUST_TARGET_IDA_VERSION)
+        string(REGEX MATCH "^9\.([0-9]+)" _cd_minor_match
+            "${CANTORDUST_TARGET_IDA_VERSION}")
+        if(NOT _cd_minor_match)
+            message(FATAL_ERROR "Invalid CANTORDUST_TARGET_IDA_VERSION")
+        endif()
+        math(EXPR _cd_target_num "900 + ${CMAKE_MATCH_1} * 10")
+        if(NOT CANTORDUST_SDK_VERSION_NUM EQUAL _cd_target_num)
+            message(FATAL_ERROR "SDK version ${CANTORDUST_SDK_VERSION_NUM} does not "
+                "match requested IDA ${CANTORDUST_TARGET_IDA_VERSION}")
+        endif()
+    endif()
+    message(STATUS "Cantor Dust SDK ${CANTORDUST_SDK_VERSION_NUM} "
+        "(legacy: ${CANTORDUST_LEGACY_SDK})")
 endif()
 
 project(ida_cantordust VERSION 0.8.0 LANGUAGES CXX)
@@ -474,7 +502,9 @@ add_executable(cantordust_preview tools/preview.cpp)
 target_link_libraries(cantordust_preview PRIVATE cantordust_core)
 
 if(CANTORDUST_BUILD_IDA_PLUGIN)
-    find_package(idasdk REQUIRED)
+    if(NOT CANTORDUST_LEGACY_SDK)
+        find_package(idasdk REQUIRED)
+    endif()
 
     # The SDK skips Qt targets when the Qt development package is absent.
     find_package(Qt6 QUIET COMPONENTS Core Gui Widgets)
@@ -503,6 +533,10 @@ if(CANTORDUST_BUILD_IDA_PLUGIN)
 
     include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/CantordustQt.cmake")
     Cantordust_RequireQtNamespace(Qt6::Core)
+
+    if(CANTORDUST_LEGACY_SDK)
+        include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/CantordustLegacySdk.cmake")
+    endif()
 
     ida_add_plugin(cantor_dust
         TYPE QT

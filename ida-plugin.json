@@ -1,0 +1,49 @@
+{
+  "$schema": "https://hcli.docs.hex-rays.com/schemas/ida-plugin.json",
+  "IDAMetadataDescriptorVersion": 1,
+  "plugin": {
+    "name": "cantordust-ida",
+    "entryPoint": "cantor_dust",
+    "version": "0.8.0",
+    "idaVersions": [
+      "9.2",
+      "9.3",
+      "9.4"
+    ],
+    "platforms": [
+      "windows-x86_64",
+      "windows-aarch64",
+      "linux-x86_64",
+      "linux-aarch64",
+      "macos-x86_64",
+      "macos-aarch64"
+    ],
+    "description": "CPU-rendered binary visualization and function exploration for IDA Pro, including Hilbert, Digraph, call paths, 3D Byte Cloud and bookmarks.",
+    "license": "MIT",
+    "categories": [
+      "ui-ux-and-visualization",
+      "disassembly-and-processor-modules"
+    ],
+    "keywords": [
+      "binary-visualization",
+      "visual-re",
+      "binvis",
+      "byte-cloud",
+      "hilbert",
+      "digraph",
+      "call-graph",
+      "reverse-engineering",
+      "path-finder",
+      "ida-pro"
+    ],
+    "urls": {
+      "repository": "https://github.com/Mauler125/Cantor-Dust-for-IDA"
+    },
+    "authors": [
+      {
+        "name": "Kawe Mazidjatari",
+        "email": "k.mazidjatari@gmail.com"
+      }
+    ]
+  }
+}

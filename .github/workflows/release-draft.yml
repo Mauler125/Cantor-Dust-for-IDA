@@ -1,0 +1,167 @@
+name: native-release-builds
+
+# Build real, versioned IDA Plugin Manager packages on GitHub-hosted machines.
+# A tag gets a draft release only after EVERY required native target succeeds.
+# Run workflow_dispatch first to inspect artifacts before tagging a release.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v[0-9]*'
+
+permissions:
+  contents: read
+
+jobs:
+  native-build:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x64
+            runner: windows-2025
+            os: windows
+            arch: x86_64
+            versions: '9.2 9.3 9.4'
+          - name: windows-arm64
+            runner: windows-11-arm
+            os: windows
+            arch: aarch64
+            versions: '9.4'
+          - name: linux-x64
+            runner: ubuntu-24.04
+            os: linux
+            arch: x86_64
+            versions: '9.2 9.3 9.4'
+          - name: linux-arm64
+            runner: ubuntu-24.04-arm
+            os: linux
+            arch: aarch64
+            versions: '9.3 9.4'
+          - name: macos-universal
+            runner: macos-15
+            os: macos
+            arch: universal
+            versions: '9.2 9.3 9.4'
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate manifest before expensive native builds
+        shell: bash
+        run: python scripts/package-plugin.py --check-manifest
+      - name: Configure MSVC for host CPU
+        if: matrix.os == 'windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.arch == 'aarch64' && 'arm64' || 'amd64' }}
+      - name: Install Linux Qt build dependencies
+        if: matrix.os == 'linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build cmake git perl python3 pkg-config \
+            libgl1-mesa-dev libfontconfig1-dev libfreetype-dev \
+            libx11-dev libx11-xcb-dev libxext-dev libxfixes-dev libxi-dev \
+            libxrender-dev libxcb1-dev libxcb-cursor-dev libxcb-glx0-dev \
+            libxcb-keysyms1-dev libxcb-image0-dev libxcb-shm0-dev \
+            libxcb-icccm4-dev libxcb-sync-dev libxcb-xfixes0-dev \
+            libxcb-shape0-dev libxcb-randr0-dev libxcb-render-util0-dev \
+            libxcb-util-dev libxcb-xinerama0-dev libxcb-xkb-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev
+      - name: Install macOS tools
+        if: matrix.os == 'macos'
+        shell: bash
+        run: brew install ninja
+      - name: Restore namespaced Qt 6.8.2
+        id: qt-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.ci/qt-prefix
+          key: cantordust-qtbase-6.8.2-QT-${{ matrix.name }}-v1
+      - name: Fetch SDKs and build namespaced Qt if missing
+        shell: bash
+        env:
+          TARGET_VERSIONS: ${{ matrix.versions }}
+          TARGET_ARCH: ${{ matrix.arch }}
+        run: |
+          read -ra versions <<< "$TARGET_VERSIONS"
+          extra=()
+          if [[ "$TARGET_ARCH" == universal ]]; then extra+=(--macos-universal); fi
+          python scripts/ci-native-deps.py \
+            --sdk-root .ci/sdks --qt-prefix .ci/qt-prefix \
+            --qt-work .ci/qt-work --versions "${versions[@]}" \
+            --parallel 4 "${extra[@]}"
+      - name: Build and package native plugins
+        shell: bash
+        env:
+          TARGET_VERSIONS: ${{ matrix.versions }}
+        run: |
+          read -ra versions <<< "$TARGET_VERSIONS"
+          python scripts/build-all.py --sdk-root .ci/sdks \
+            --qt-prefix .ci/qt-prefix --versions "${versions[@]}" \
+            --build-root .ci/native-build --output dist --parallel 4
+      - name: Upload installable native ZIPs
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.name }}
+          path: dist/cantordust-ida-v*-ida*-*.zip
+          if-no-files-found: error
+          retention-days: 30
+
+  collect-native:
+    name: Validate and collect all packages
+    needs: native-build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Download native artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: native-*
+          path: native-artifacts
+      - name: Verify full release matrix and manifests
+        shell: bash
+        run: |
+          python scripts/package-plugin.py --check-manifest
+          python scripts/build-all.py --collect native-artifacts/* --output dist
+          python scripts/ci-verify-release.py --dist dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cantordust-all-native-zips
+          path: dist/*.zip
+          if-no-files-found: error
+
+  create-draft-release:
+    name: Upload all packages to draft GitHub Release
+    needs: collect-native
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: cantordust-all-native-zips
+          path: dist
+      - name: Create or update draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          python3 scripts/package-plugin.py --check-manifest --tag "$RELEASE_TAG"
+          python3 scripts/ci-verify-release.py --dist dist
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --draft --verify-tag \
+              --title "Cantor Dust $RELEASE_TAG" --generate-notes
+          fi
+          gh release upload "$RELEASE_TAG" dist/*.zip --clobber
+          echo "Native packages uploaded to draft release $RELEASE_TAG. Publish after testing."

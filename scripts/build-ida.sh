@@ -72,8 +72,8 @@ if [[ -z "$sdk_dir" ]]; then
     exit 2
 fi
 
-if [[ ! -f "${sdk_dir}/src/cmake/idasdk_init.cmake" &&
-      ! -f "${sdk_dir}/cmake/idasdk_init.cmake" ]]; then
+if [[ ! -f "${sdk_dir}/src/include/pro.h" &&
+      ! -f "${sdk_dir}/include/pro.h" ]]; then
     echo "Invalid IDA SDK directory: ${sdk_dir}" >&2
     exit 2
 fi

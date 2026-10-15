@@ -15,11 +15,11 @@ if ([string]::IsNullOrWhiteSpace($Sdk)) {
     throw 'Pass -Sdk C:\path\to\ida-sdk or set IDASDK.'
 }
 
-$sdkInitInCheckout = Join-Path $Sdk 'src/cmake/idasdk_init.cmake'
-$sdkInitInSource = Join-Path $Sdk 'cmake/idasdk_init.cmake'
+$sdkInitInCheckout = Join-Path $Sdk 'src/include/pro.h'
+$sdkInitInSource = Join-Path $Sdk 'include/pro.h'
 if (-not (Test-Path -LiteralPath $sdkInitInCheckout -PathType Leaf) -and
     -not (Test-Path -LiteralPath $sdkInitInSource -PathType Leaf)) {
-    throw "Invalid IDA SDK directory: $Sdk (expected an SDK checkout or its src directory)"
+    throw "Invalid IDA SDK directory: $Sdk (expected include/pro.h under root or src)"
 }
 
 if ([string]::IsNullOrWhiteSpace($BuildDir)) {
