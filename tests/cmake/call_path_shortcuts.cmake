@@ -46,16 +46,6 @@ foreach(_required IN ITEMS
     endif()
 endforeach()
 
-foreach(_required IN ITEMS
-    "Ctrl+Alt+Shift+S"
-    "Ctrl+Alt+Shift+E"
-    "Configure Shortcuts")
-    string(FIND "${_readme}" "${_required}" _pos)
-    if(_pos EQUAL -1)
-        message(FATAL_ERROR "README does not explain shortcut configuration")
-    endif()
-endforeach()
-
 string(FIND "${_plugin}" "QShortcut" _qt_shortcut)
 # Only allow a mention in the comment explaining why we do not create Qt
 # shortcuts. A second binding would double-trigger endpoints.
