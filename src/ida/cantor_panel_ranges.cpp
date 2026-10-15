@@ -74,7 +74,12 @@ void CantorPanel::ListSegments( const bool followCursor )
         }
 
         qstring name;
+#if IDA_SDK_VERSION >= 940
         get_segment_name( &name, segment->start_ea );
+#else
+        // IDA 9.2/9.3 accept a segment pointer, not a start address.
+        get_segm_name( &name, segment );
+#endif
         m_segmentBox->addItem(
             QString( "%1 [%2 - %3]" )
                 .arg( QString::fromUtf8( name.c_str() ) )
