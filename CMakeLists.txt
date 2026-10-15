@@ -336,6 +336,9 @@ target_link_libraries(cantordust_universe_preview PRIVATE cantordust_core)
 add_executable(cantordust_cube_benchmark tools/cube_benchmark.cpp)
 target_link_libraries(cantordust_cube_benchmark PRIVATE cantordust_core)
 
+add_executable(cantordust_cube_preview tools/cube_preview.cpp)
+target_link_libraries(cantordust_cube_preview PRIVATE cantordust_core)
+
 add_executable(cantordust_preview tools/preview.cpp)
 target_link_libraries(cantordust_preview PRIVATE cantordust_core)
 
