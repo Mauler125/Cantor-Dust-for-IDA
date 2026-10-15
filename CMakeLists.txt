@@ -34,6 +34,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(CANTORDUST_STRICT_WARNINGS "Enable additional portable C++ warnings" OFF)
 option(CANTORDUST_ENABLE_SANITIZERS "Use ASan and UBSan for portable tests" OFF)
 option(CANTORDUST_CHECK_HEADERS "Compile portable headers independently" OFF)
+option(CANTORDUST_USE_PCH "Use target-specific precompiled headers for faster builds" ON)
 
 if(CANTORDUST_ENABLE_SANITIZERS)
     if(MSVC OR NOT CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -77,6 +78,13 @@ target_include_directories(cantordust_core
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 set_target_properties(cantordust_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+# A PCH is private to its compilation target. Do not propagate it to tests,
+# tools, SDK mock targets, or header self-containment checks.
+if(CANTORDUST_USE_PCH)
+    target_precompile_headers(cantordust_core PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/pch/core_pch.h")
+endif()
 
 if(CANTORDUST_STRICT_WARNINGS)
     if(MSVC)
@@ -431,6 +439,13 @@ if(CANTORDUST_BUILD_IDA_PLUGIN)
         ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
     target_link_libraries(cantor_dust PRIVATE cantordust_core)
+
+    # Qt and IDA builds need different compilation environments. The plugin
+    # gets its own Qt-only PCH, with no IDA SDK headers or portable PCH reuse.
+    if(CANTORDUST_USE_PCH)
+        target_precompile_headers(cantor_dust PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/pch/ida_pch.h")
+    endif()
 
     if(MSVC)
         target_compile_options(cantor_dust PRIVATE /GR)
