@@ -1,3 +1,4 @@
+#include <array>
 #include "cantordust/palette.h"
 #include "cantordust/scalar_types.h"
 
@@ -97,6 +98,20 @@ u32 Palette_ByteColor(
     }
 
     return palette.full;
+}
+
+const std::array< u32, 256 >& Palette_ByteColorTable( const Palette_e index )
+{
+    static const auto tables = [] {
+        std::array< std::array< u32, 256 >, CDP_COUNT > result{};
+        for ( usize p = 0; p < CDP_COUNT; ++p )
+            for ( usize byte = 0; byte < 256; ++byte )
+                result[ p ][ byte ] = Palette_ByteColor(
+                    static_cast< u8 >( byte ), s_palettes[ p ] );
+        return result;
+    }();
+    const unsigned int ordinal = static_cast< unsigned int >( index );
+    return tables[ ordinal < CDP_COUNT ? ordinal : CDP_REFERENCE ];
 }
 
 const Palette_s& Palette_Get( const Palette_e index )

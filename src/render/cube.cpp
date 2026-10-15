@@ -11,6 +11,8 @@
 #define CANTORDUST_CUBE_VOXELS ( CANTORDUST_CUBE_GRID * \
     CANTORDUST_CUBE_GRID * CANTORDUST_CUBE_GRID )
 
+#include <array>
+
 namespace cantordust
 {
 
@@ -41,15 +43,23 @@ bool Cube_DecodeTriplet( const u8* const bytes,
 
         if ( mode == CCV_POPCOUNT8 )
         {
-            unsigned int value = bytes[ offset ];
-            unsigned int count = 0;
-
-            while ( value != 0 )
-    {
-        count += value & 1u;
-        value >>= 1u;
-    }
-            return static_cast< u8 >( count * 255u / 8u );
+            // The scaling matches the original integer division exactly.
+            static constexpr auto counts = []() constexpr {
+                std::array< u8, 256 > table{};
+                for ( unsigned int byte = 0; byte < table.size(); ++byte )
+                {
+                    unsigned int value = byte;
+                    unsigned int count = 0;
+                    while ( value != 0 )
+                    {
+                        count += value & 1u;
+                        value >>= 1u;
+                    }
+                    table[ byte ] = static_cast< u8 >( count * 255u / 8u );
+                }
+                return table;
+            }();
+            return counts[ bytes[ offset ] ];
         }
         // High byte represents the most significant 8 bits of u16/u32.
         return bytes[ offset + ( big ? 0u : width - 1u ) ];
@@ -398,6 +408,22 @@ void Cube_RenderInto( Image_s& image,
         { 0.00f, 0.010f, 0.028f, 0.010f, 0.00f }
     };
 
+    // Point size is fixed for a frame. Compute the custom-size kernel once
+    // rather than evaluating exp() for every visible voxel and pixel.
+    std::array< f32, 81 > weights{};
+    const int diameter = 2 * radius + 1;
+
+    for ( int ky = -radius; ky <= radius; ++ky )
+    {
+        for ( int kx = -radius; kx <= radius; ++kx )
+        {
+            weights[ ( ky + radius ) * diameter + kx + radius ] =
+                pointSize == 1.0f ? kernel[ ky + 2 ][ kx + 2 ] :
+                std::exp( -2.16f * static_cast< f32 >( kx * kx + ky * ky ) /
+                    ( pointSize * pointSize ) );
+        }
+    }
+
     for ( const CubePoint_s& point : cloud.points )
     {
         f32 x = 0, y = 0, z = 0;
@@ -424,10 +450,8 @@ void Cube_RenderInto( Image_s& image,
         {
             for ( int kx = -radius; kx <= radius; ++kx )
             {
-                const f32 weight = pointSize == 1.0f
-                    ? kernel[ ky + 2 ][ kx + 2 ]
-                    : std::exp( -2.16f * static_cast< f32 >( kx * kx + ky * ky ) /
-                        ( pointSize * pointSize ) );
+                const f32 weight = weights[
+                    ( ky + radius ) * diameter + kx + radius ];
 
                 if ( weight <= 0.0f )
                 {

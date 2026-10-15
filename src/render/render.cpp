@@ -62,21 +62,20 @@ static void Render_ByteRaster(
     Image_s& image,
     const std::vector< ByteCell_s >& data,
     const bool hilbert,
-    const Palette_s& palette )
+    const Palette_s& palette,
+    const u32* const byteColors )
 {
     const ByteCell_s* const cells = data.data();
+    const u32* const hilbertPixels = hilbert
+        ? Math_HilbertPixelOffsets( image.width ).data() : nullptr;
 
     for ( usize i = 0; i < data.size(); ++i )
     {
-        const Point_s point = hilbert
-            ? Math_HilbertPosition( i, image.width )
-            : Point_s{ i % image.width, i / image.width };
-
-        const usize pixel = point.y * image.width + point.x;
+        const usize pixel = hilbert ? hilbertPixels[ i ] : i;
         const ByteCell_s& cell = cells[ i ];
 
         image.argb[ pixel ] = cell.valid
-            ? Palette_ByteColor( cell.value, palette )
+            ? byteColors[ cell.value ]
             : palette.missing;
 
         if ( cell.valid )
@@ -90,7 +89,8 @@ static void Render_ByteRasterMapped(
     Image_s& image,
     const std::vector< ByteCell_s >& data,
     const std::vector< usize >& sourceOffsets,
-    const Palette_s& palette )
+    const Palette_s& palette,
+    const u32* const byteColors )
 {
     const usize count = std::min( data.size(), sourceOffsets.size() );
 
@@ -101,7 +101,7 @@ static void Render_ByteRasterMapped(
         const ByteCell_s& cell = data[ i ];
 
         image.argb[ pixel ] = cell.valid
-            ? Palette_ByteColor( cell.value, palette )
+            ? byteColors[ cell.value ]
             : palette.missing;
 
         image.sourceIndex[ pixel ] = cell.valid
@@ -143,18 +143,34 @@ static void Render_Digraph(
     const u32 highest =
         *std::max_element( counts.begin(), counts.end() );
 
+    // At 256 pixels per side, every bucket is visited once. At higher
+    // resolutions the same bucket is used repeatedly, so cache its exact
+    // color once per frame instead of repeating the density logarithm.
+    if ( image.width == CANTORDUST_SIDE )
+    {
+        for ( usize pixel = 0; pixel < counts.size(); ++pixel )
+        {
+            image.argb[ pixel ] = Render_DensityColor(
+                counts[ pixel ], highest, palette );
+            image.sourceIndex[ pixel ] = first[ pixel ];
+        }
+        return;
+    }
+
+    std::vector< u32 > bucketColors( CANTORDUST_WINDOW_SIZE );
+    for ( usize bucket = 0; bucket < bucketColors.size(); ++bucket )
+        bucketColors[ bucket ] = Render_DensityColor(
+            counts[ bucket ], highest, palette );
+
     for ( usize y = 0; y < image.height; ++y )
     {
+        const usize bucketRow = y * CANTORDUST_SIDE / image.height;
         for ( usize x = 0; x < image.width; ++x )
         {
-            const usize bucket =
-                ( y * CANTORDUST_SIDE / image.height ) * CANTORDUST_SIDE +
-                ( x * CANTORDUST_SIDE / image.width );
-
+            const usize bucket = bucketRow * CANTORDUST_SIDE +
+                x * CANTORDUST_SIDE / image.width;
             const usize pixel = y * image.width + x;
-            image.argb[ pixel ] = Render_DensityColor(
-                counts[ bucket ], highest, palette );
-
+            image.argb[ pixel ] = bucketColors[ bucket ];
             image.sourceIndex[ pixel ] = first[ bucket ];
         }
     }
@@ -232,7 +248,8 @@ Image_s Render( const View_e view,
     switch ( view )
     {
         case CDV_LINEAR:
-            Render_ByteRaster( image, data, false, palette );
+            Render_ByteRaster( image, data, false, palette,
+                Palette_ByteColorTable( paletteIndex ).data() );
             break;
 
         case CDV_DIGRAPH:
@@ -244,7 +261,8 @@ Image_s Render( const View_e view,
             break;
 
         case CDV_HILBERT:
-            Render_ByteRaster( image, data, true, palette );
+            Render_ByteRaster( image, data, true, palette,
+                Palette_ByteColorTable( paletteIndex ).data() );
             break;
 
         default:
@@ -266,6 +284,7 @@ Image_s RenderDetail( const View_e view,
     Image_s image = Render( view, data, side, paletteIndex );
 
     const Palette_s& palette = Palette_Get( paletteIndex );
+    const u32* const byteColors = Palette_ByteColorTable( paletteIndex ).data();
 
     if ( data.empty() || data.size() == side * side )
     {
@@ -273,18 +292,16 @@ Image_s RenderDetail( const View_e view,
     }
 
     const usize pixelCount = side * side;
+    const u32* const hilbertPixels = view == CDV_HILBERT
+        ? Math_HilbertPixelOffsets( side ).data() : nullptr;
 
     for ( usize i = 0; i < pixelCount; ++i )
     {
         const usize source = i * data.size() / pixelCount;
-        const Point_s point = view == CDV_HILBERT
-            ? Math_HilbertPosition( i, side )
-            : Point_s{ i % side, i / side };
-
-        const usize pixel = point.y * side + point.x;
+        const usize pixel = hilbertPixels ? hilbertPixels[ i ] : i;
         const ByteCell_s& cell = data[ source ];
         image.argb[ pixel ] = cell.valid
-            ? Palette_ByteColor( cell.value, palette ) : palette.missing;
+            ? byteColors[ cell.value ] : palette.missing;
 
         image.sourceIndex[ pixel ] = cell.valid
             ? source : CANTORDUST_NO_SOURCE;
@@ -307,7 +324,8 @@ Image_s RenderLinearMapped(
 
     const Palette_s& palette = Palette_Get( paletteIndex );
     Image_s image = Render_EmptyImage( side, palette );
-    Render_ByteRasterMapped( image, data, sourceOffsets, palette );
+    Render_ByteRasterMapped( image, data, sourceOffsets, palette,
+        Palette_ByteColorTable( paletteIndex ).data() );
     return image;
 }
 
@@ -325,11 +343,11 @@ Image_s RenderHilbertOverview(
 
     const Palette_s& palette = Palette_Get( paletteIndex );
     Image_s image = Render_EmptyImage( side, palette );
+    const u32* const hilbertPixels = Math_HilbertPixelOffsets( side ).data();
 
     for ( usize i = 0; i < classes.size(); ++i )
     {
-        const Point_s position = Math_HilbertPosition( i, side );
-        const usize pixel = position.y * side + position.x;
+        const usize pixel = hilbertPixels[ i ];
         image.argb[ pixel ] = Render_ClassColor( classes[ i ], palette );
 
         if ( classes[ i ].SampleCount() != 0 )

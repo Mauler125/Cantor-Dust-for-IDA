@@ -3,6 +3,7 @@
 #include "cantordust/scalar_types.h"
 
 #include <stdexcept>
+#include <mutex>
 
 namespace cantordust
 {
@@ -72,6 +73,31 @@ usize Math_HilbertIndex( Point_s point, const usize side )
     }
 
     return index;
+}
+
+const std::vector< u32 >& Math_HilbertPixelOffsets( const usize side )
+{
+    if ( side == 0 || ( side & ( side - 1 ) ) != 0 || side > 1024 )
+        throw std::out_of_range( "Invalid Hilbert side" );
+
+    // The supported powers of two share only eleven small cache descriptors.
+    // No pixel storage is allocated until a particular resolution is used.
+    static std::array< std::once_flag, 11 > once;
+    static std::array< std::vector< u32 >, 11 > offsets;
+    unsigned int level = 0;
+    for ( usize n = side; n > 1; n >>= 1 )
+        ++level;
+
+    std::call_once( once[ level ], [side, level]() {
+        std::vector< u32 >& table = offsets[ level ];
+        table.resize( side * side );
+        for ( usize ordinal = 0; ordinal < table.size(); ++ordinal )
+        {
+            const Point_s point = Math_HilbertPosition( ordinal, side );
+            table[ ordinal ] = static_cast< u32 >( point.y * side + point.x );
+        }
+    } );
+    return offsets[ level ];
 }
 
 Point_s Math_HilbertPosition( const usize index )

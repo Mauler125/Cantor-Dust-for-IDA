@@ -3,6 +3,7 @@
 
 
 #include "cantordust/scalar_types.h"
+#include <array>
 #include <cstddef>
 #include <cstdint>
 
@@ -51,6 +52,8 @@ struct Palette_s
 };
 
 u32 Palette_ByteColor( u8 byte, const Palette_s& palette );
+// Immutable byte colors, computed once for each of the built-in palettes.
+const std::array< u32, 256 >& Palette_ByteColorTable( Palette_e index );
 
 const Palette_s& Palette_Get( Palette_e index );
 usize Palette_Count();

@@ -105,6 +105,8 @@ FittedRaster_s Math_FitByteRaster(
     }
 
     const usize count = source.argb.size();
+    const std::vector< u32 >* const hilbertPixels = mode == CDV_HILBERT
+        ? &Math_HilbertPixelOffsets( source.width ) : nullptr;
     const f64 aspect = static_cast< f64 >( std::max( 1, viewportWidth ) ) /
         static_cast< f64 >( std::max( 1, viewportHeight ) );
     const usize width = std::clamp< usize >(
@@ -122,12 +124,8 @@ FittedRaster_s Math_FitByteRaster(
         result.ordinal.resize( count );
         for ( usize ordinal = 0; ordinal < count; ++ordinal )
         {
-            const usize pixel = mode == CDV_HILBERT
-                ? [&]() {
-                    const Point_s point = Math_HilbertPosition( ordinal, source.width );
-                    return point.y * source.width + point.x;
-                }()
-                : ordinal;
+            const usize pixel = hilbertPixels
+                ? ( *hilbertPixels )[ ordinal ] : ordinal;
             result.ordinal[ pixel ] = ordinal;
         }
         return result;
@@ -144,12 +142,8 @@ FittedRaster_s Math_FitByteRaster(
     usize step = 0;
     const auto visit = [&]( const i64 x, const i64 y ) {
         const usize ordinal = step * count / pixels;
-        const usize sourcePixel = mode == CDV_HILBERT
-            ? [&]() {
-                const Point_s point = Math_HilbertPosition( ordinal, source.width );
-                return point.y * source.width + point.x;
-            }()
-            : ordinal;
+        const usize sourcePixel = hilbertPixels
+            ? ( *hilbertPixels )[ ordinal ] : ordinal;
         const usize targetPixel = static_cast< usize >( y ) * width +
             static_cast< usize >( x );
 

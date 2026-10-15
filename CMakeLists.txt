@@ -204,6 +204,19 @@ if(BUILD_TESTING)
     add_test(NAME universe_communities
         COMMAND cantordust_universe_communities_tests)
 
+    add_executable(cantordust_struct_layout_tests
+        tests/struct_layout_tests.cpp)
+    target_link_libraries(cantordust_struct_layout_tests PRIVATE cantordust_core)
+    add_test(NAME hot_struct_layout COMMAND cantordust_struct_layout_tests)
+
+    add_executable(cantordust_precompute_render_tests
+        tests/precompute_render_tests.cpp)
+    target_include_directories(cantordust_precompute_render_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(cantordust_precompute_render_tests
+        PRIVATE cantordust_core)
+    add_test(NAME precompute_render COMMAND cantordust_precompute_render_tests)
+
     add_executable(cantordust_cube_modes_tests tests/cube_modes_tests.cpp)
     target_link_libraries(cantordust_cube_modes_tests PRIVATE cantordust_core)
     add_test(NAME cube_modes COMMAND cantordust_cube_modes_tests)
@@ -360,6 +373,11 @@ target_link_libraries(cantordust_universe_explore_preview
 
 add_executable(cantordust_universe_preview tools/universe_preview.cpp)
 target_link_libraries(cantordust_universe_preview PRIVATE cantordust_core)
+
+add_executable(cantordust_precompute_benchmark tools/precompute_benchmark.cpp)
+target_include_directories(cantordust_precompute_benchmark PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(cantordust_precompute_benchmark PRIVATE cantordust_core)
 
 add_executable(cantordust_cube_benchmark tools/cube_benchmark.cpp)
 target_link_libraries(cantordust_cube_benchmark PRIVATE cantordust_core)
