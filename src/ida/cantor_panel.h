@@ -35,6 +35,8 @@ public:
     explicit CantorPanel( QWidget* parent = nullptr );
     // Called by the IDA UI address-change hook (main/UI thread).
     void OnIdaCursorChanged( ea_t address );
+    // Invoked by IDA-wide, user-configurable call-path actions.
+    void SetCallPathEndpointFromAction( bool isStart );
 
 protected:
     bool eventFilter( QObject* watched, QEvent* event ) override;

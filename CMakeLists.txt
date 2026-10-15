@@ -297,6 +297,11 @@ if(BUILD_TESTING)
             -DCANTORDUST_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/panel_call_path_endpoint_order.cmake)
 
+    add_test(NAME call_path_shortcuts
+        COMMAND ${CMAKE_COMMAND}
+            -DCANTORDUST_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/call_path_shortcuts.cmake)
+
     add_test(NAME panel_narrow_universe_layout
         COMMAND ${CMAKE_COMMAND}
             -DCANTORDUST_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}

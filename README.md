@@ -24,6 +24,8 @@ Explore callers, callees, and function references in an interactive 3D network g
 
 Find all paths between two functions, inspect call sites, and jump to the relevant addresses in IDA. Useful for isolating code to just what's needed for finding bugs and vulnerabilities!
 
+Use `Ctrl+Alt+Shift+S` to set the path start and `Ctrl+Alt+Shift+E` to set the path end, in either order. Both shortcuts are customizable through IDA's shortcut editor.
+
 ![Call path exploration](examples/call_paths.png)
 
 ### Byte Maps

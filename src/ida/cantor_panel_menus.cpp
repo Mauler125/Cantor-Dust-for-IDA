@@ -7,6 +7,8 @@
 #include <QMenuBar>
 #include <QUrl>
 
+#include <kernwin.hpp>
+
 namespace cantordust
 {
 
@@ -215,6 +217,12 @@ void CantorPanel::BuildMenus( QMenuBar* const menuBar,
     } );
     pathsMenu->addAction( "&Clear Path", this, [this]() {
         m_universeClearPathButton->click();
+    } );
+    pathsMenu->addSeparator();
+    pathsMenu->addAction( "Configure &Shortcuts...", this, []() {
+        // Let IDA's shortcut editor handle conflicts, persistence and clearing.
+        // These are registered IDA actions, not competing Qt shortcuts.
+        process_ui_action( "ShortcutEditor" );
     } );
     toolsMenu->addSeparator();
     toolsMenu->addAction( "&Explorer Budgets...", this, [this, explorerPage]() {

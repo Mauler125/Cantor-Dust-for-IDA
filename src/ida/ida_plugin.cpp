@@ -4,6 +4,8 @@
 #include <QPointer>
 #include <QIcon>
 
+#include <vector>
+
 #include <ida.hpp>
 #include <idp.hpp>
 #include <kernwin.hpp>
@@ -13,6 +15,27 @@ namespace
 {
 
 static const char s_widgetTitle[] = "Cantor Dust";
+static const char s_pathStartAction[] = "cantordust:set_path_start";
+static const char s_pathEndAction[] = "cantordust:set_path_end";
+
+struct CantorDustPlugin_s;
+
+// Native IDA actions work while the disassembly has focus and appear in
+// Options > Shortcuts. IDA manages user overrides and collision warnings.
+struct CallPathActionHandler final : action_handler_t
+{
+    CantorDustPlugin_s* plugin;
+    bool isStart;
+
+    CallPathActionHandler( CantorDustPlugin_s* const owner,
+        const bool start ) : plugin( owner ), isStart( start ) {}
+
+    int idaapi activate( action_activation_ctx_t* ) override;
+    action_state_t idaapi update( action_update_ctx_t* ) override
+    {
+        return AST_ENABLE_FOR_IDB;
+    }
+};
 
 static QIcon CantorDustWidgetIcon()
 {
@@ -26,10 +49,41 @@ struct CantorDustPlugin_s final : plugmod_t, event_listener_t
 {
     TWidget* widget = nullptr;
     QPointer< cantordust::CantorPanel > panel;
+    // A shortcut may open a hidden dock. Defer endpoint selection until the
+    // panel receives ui_widget_visible, without losing the current IDA cursor.
+    std::vector< bool > pendingPathEndpoints;
+    CallPathActionHandler pathStartAction{ this, true };
+    CallPathActionHandler pathEndAction{ this, false };
+    bool startActionRegistered = false;
+    bool endActionRegistered = false;
 
     CantorDustPlugin_s()
     {
         hook_event_listener( HT_UI, this );
+
+        // Register global actions, not local QShortcuts. Their default keys
+        // were checked against IDA's supplied idagui.cfg, and end users can
+        // reassign or remove them in IDA's conflict-aware shortcut editor.
+        const action_desc_t startDesc = ACTION_DESC_LITERAL_PLUGMOD(
+            s_pathStartAction, "Cantor Dust: Set Path Start",
+            &pathStartAction, this, "Ctrl+Alt+Shift+S",
+            "Use the IDA cursor or selected Cantor Dust search result as path start", -1 );
+        startActionRegistered = register_action( startDesc );
+
+        const action_desc_t endDesc = ACTION_DESC_LITERAL_PLUGMOD(
+            s_pathEndAction, "Cantor Dust: Set Path End",
+            &pathEndAction, this, "Ctrl+Alt+Shift+E",
+            "Use the IDA cursor or selected Cantor Dust search result as path end", -1 );
+        endActionRegistered = register_action( endDesc );
+    }
+
+    ~CantorDustPlugin_s() override
+    {
+        // Handlers are members; unregister before they are destroyed.
+        if ( endActionRegistered )
+            unregister_action( s_pathEndAction );
+        if ( startActionRegistered )
+            unregister_action( s_pathStartAction );
     }
 
     // IDA requires the run/on_event virtual method names.
@@ -72,6 +126,13 @@ struct CantorDustPlugin_s final : plugmod_t, event_listener_t
                     // its Qt children. Resume forwarding to that same panel.
                     panel = static_cast< cantordust::CantorPanel* >( existing );
                     panel->OnIdaCursorChanged( get_screen_ea() );
+                }
+
+                if ( panel != nullptr )
+                {
+                    for ( const bool isStart : pendingPathEndpoints )
+                        panel->SetCallPathEndpointFromAction( isStart );
+                    pendingPathEndpoints.clear();
                 }
             }
         }
@@ -125,6 +186,26 @@ struct CantorDustPlugin_s final : plugmod_t, event_listener_t
         return true;
     }
 };
+
+int idaapi CallPathActionHandler::activate( action_activation_ctx_t* )
+{
+    // The native action also works while the disassembly has focus. If the
+    // dock is closed, queue the endpoint and apply it when IDA shows the UI.
+    if ( plugin->panel == nullptr )
+    {
+        plugin->pendingPathEndpoints.push_back( isStart );
+        if ( !plugin->run( 0 ) )
+        {
+            plugin->pendingPathEndpoints.pop_back();
+            return 0;
+        }
+
+        return 1;
+    }
+
+    plugin->panel->SetCallPathEndpointFromAction( isStart );
+    return 1;
+}
 
 static plugmod_t* idaapi Plugin_Initialize()
 {

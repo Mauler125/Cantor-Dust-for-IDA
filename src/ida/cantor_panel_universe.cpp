@@ -194,6 +194,11 @@ void CantorPanel::UpdateUniversePathToolTips()
         tooltip( "End", m_universePathEndpoints.end ) );
 }
 
+void CantorPanel::SetCallPathEndpointFromAction( const bool isStart )
+{
+    SetUniversePathEndpoint( isStart );
+}
+
 void CantorPanel::SetUniversePathEndpoint( const bool isStart )
 {
     const std::optional< UniversePathEndpoint_s > endpoint = PathEndpointSelection();
