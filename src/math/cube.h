@@ -5,6 +5,10 @@
 #include "cantordust/scalar_types.h"
 #include "cantordust/cube.h"
 
+#include <algorithm>
+#include <array>
+#include <cmath>
+
 namespace cantordust
 {
 
