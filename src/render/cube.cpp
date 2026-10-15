@@ -342,17 +342,7 @@ static void Cube_MapGeometry( const CubePoint_s& point,
     }
     else if ( mode == CCG_TETRAHEDRON )
     {
-        f32 a = ( x + 1.0f ) * 0.5f;
-        f32 b = ( y + 1.0f ) * 0.5f;
-        f32 c = ( z + 1.0f ) * 0.5f;
-
-        const f32 total = std::max( 1.0f, a + b + c );
-        a /= total;
-        b /= total;
-        c /= total;
-        x = -1.0f + 2.0f * a + b + c;
-        y = -1.0f + 2.0f * b;
-        z = -1.0f + 2.0f * c;
+        Math_CubeMapTetrahedron( x, y, z );
     }
 }
 
@@ -551,9 +541,7 @@ void Cube_RenderInto( Image_s& image,
         }
         else if ( options.geometry == CCG_TETRAHEDRON )
         {
-            const f32 vertices[ 4 ][ 3 ] = {
-                { -1, -1, -1 }, { 1, -1, -1 }, { 0, 1, -1 }, { 0, -1, 1 }
-            };
+            const auto& vertices = Math_CubeTetrahedronVertices();
 
             for ( int a = 0; a < 4; ++a )
                 for ( int b = a + 1; b < 4; ++b )

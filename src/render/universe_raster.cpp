@@ -687,13 +687,9 @@ static void Universe_DrawGlobal( Image_s& image, UniverseRaster_s& raster,
         return;
     }
 
-    // A tetrahedron has four 3D vertices and four triangular faces.
-    static const UniversePosition_s vertices[ 4 ] = {
-        { 0.0f, 1.2f, 0.0f },
-        { -0.95f, -0.70f, -0.65f },
-        { 0.95f, -0.70f, -0.65f },
-        { 0.0f, -0.70f, 1.05f }
-    };
+    // Share the regular, origin-centered tetrahedron with the byte cloud.
+    // Each global retains its existing independently randomized rotation.
+    const auto& vertices = Math_CubeTetrahedronVertices();
     static const int faces[ 4 ][ 3 ] = {
         { 0, 1, 2 }, { 0, 2, 3 }, { 0, 3, 1 }, { 1, 3, 2 }
     };
@@ -725,10 +721,10 @@ static void Universe_DrawGlobal( Image_s& image, UniverseRaster_s& raster,
 
     for ( usize i = 0; i < projected.size(); ++i )
     {
-        const UniversePosition_s& vertex = vertices[ i ];
-        const f32 x1 = vertex.x;
-        const f32 y1 = vertex.y * cx - vertex.z * sx;
-        const f32 z1 = vertex.y * sx + vertex.z * cx;
+        const auto& vertex = vertices[ i ];
+        const f32 x1 = vertex[ 0 ];
+        const f32 y1 = vertex[ 1 ] * cx - vertex[ 2 ] * sx;
+        const f32 z1 = vertex[ 1 ] * sx + vertex[ 2 ] * cx;
         const f32 x2 = x1 * cy + z1 * sy;
         const f32 z2 = -x1 * sy + z1 * cy;
         const f32 x3 = x2 * cz - y1 * sz;

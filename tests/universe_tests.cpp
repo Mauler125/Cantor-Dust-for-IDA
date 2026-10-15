@@ -1586,6 +1586,56 @@ static void Tests_OrganicAdaptiveLayout()
     }
 }
 
+static void Tests_RegularGlobalTetrahedron()
+{
+    const auto& vertices = Math_CubeTetrahedronVertices();
+    constexpr float tolerance = 0.00002f;
+    constexpr float edgeSquared = 8.0f / 3.0f;
+
+    // Globals share the upright, unit-radius tetrahedron used by Byte Cloud.
+    for ( std::size_t axis = 0; axis < 3; ++axis )
+    {
+        float center = 0.0f;
+        for ( const auto& vertex : vertices )
+            center += vertex[ axis ];
+        assert( std::abs( center ) < tolerance );
+    }
+
+    for ( std::size_t a = 0; a < vertices.size(); ++a )
+    {
+        for ( std::size_t b = a + 1; b < vertices.size(); ++b )
+        {
+            float distanceSquared = 0.0f;
+            for ( std::size_t axis = 0; axis < 3; ++axis )
+            {
+                const float d = vertices[ a ][ axis ] - vertices[ b ][ axis ];
+                distanceSquared += d * d;
+            }
+            assert( std::abs( distanceSquared - edgeSquared ) < tolerance );
+        }
+    }
+
+    // Randomized vertex orientations must still project around the global's
+    // location and leave a selectable center at ordinary camera angles.
+    UniverseGraph_s graph;
+    graph.nodes = { { 0xA000u, "global", 6u, 0u, 0u,
+        0.0f, 0.0f, 0.0f, UNK_GLOBAL } };
+    UniverseRenderStyle_s style;
+    style.antiAliasing = false;
+    Image_s image;
+    CubeCamera_s camera;
+
+    for ( const auto angles : { std::array< float, 2 >{ 0.0f, 0.0f },
+                               std::array< float, 2 >{ 0.68f, 0.38f } } )
+    {
+        camera.yaw = angles[ 0 ];
+        camera.pitch = angles[ 1 ];
+        Universe_RenderInto( image, graph, camera, CANTORDUST_NO_SOURCE,
+            false, 640u, 480u, CDP_GHIDRA_VIOLET, {}, style );
+        assert( image.SourceAt( 320u, 240u ) == 0u );
+    }
+}
+
 static void Tests_TetrahedronExtremeSpacing()
 {
     // At very high spacing, an outlying global can approach or pass the
@@ -1783,6 +1833,7 @@ int main()
     Tests_ClippedVisibleConnections();
     Tests_PerspectiveNodeSizeAndAntiAliasing();
     Tests_TetrahedronExtremeSpacing();
+    Tests_RegularGlobalTetrahedron();
     Tests_ProminentCameraFraming();
     Tests_OrganicAdaptiveLayout();
     Tests_RelativeNodeSize();

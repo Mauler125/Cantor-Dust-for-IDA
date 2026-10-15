@@ -146,7 +146,8 @@ static void Render_Digraph(
     // At 256 pixels per side, every bucket is visited once. At higher
     // resolutions the same bucket is used repeatedly, so cache its exact
     // color once per frame instead of repeating the density logarithm.
-    if ( image.width == CANTORDUST_SIDE )
+    if ( image.width == CANTORDUST_SIDE &&
+         image.height == CANTORDUST_SIDE )
     {
         for ( usize pixel = 0; pixel < counts.size(); ++pixel )
         {
