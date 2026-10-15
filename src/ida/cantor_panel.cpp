@@ -170,8 +170,8 @@ CantorPanel::CantorPanel( QWidget* const parent )
     , m_universeFilterToggle( new QCheckBox( "Filter view", this ) )
     , m_universeClusterToggle( new QCheckBox( "Clusters", this ) )
     , m_universeSearchResults( new QComboBox( this ) )
-    , m_universePathFromButton( new QPushButton( "Path from", this ) )
-    , m_universePathToButton( new QPushButton( "Find path to", this ) )
+    , m_universePathFromButton( new QPushButton( "Set Path Start", this ) )
+    , m_universePathToButton( new QPushButton( "Set Path End", this ) )
     , m_universeClearPathButton( new QPushButton( "Clear path", this ) )
     , m_universeRouteBox( new QComboBox( this ) )
     , m_viewBox( new QComboBox( this ) )
@@ -1043,13 +1043,7 @@ CantorPanel::CantorPanel( QWidget* const parent )
     exploreLayout->addLayout( resultRow );
     jumpResult->setToolTip( "Jump to the selected function in IDA." );
     focusResult->setToolTip( "Focus the selected function in the 3D universe." );
-    m_universePathFromButton->setToolTip(
-        "Set the path start to the current IDA function. To use a search "
-        "result instead, type a query or choose a result first." );
-
-    m_universePathToButton->setToolTip(
-        "Find up to five directed routes to the current IDA function. "
-        "A freshly selected search result overrides the IDA cursor." );
+    UpdateUniversePathToolTips();
 
     m_universeClearPathButton->setToolTip(
         "Exit the call path view and restore the universe graph." );
@@ -1154,71 +1148,20 @@ CantorPanel::CantorPanel( QWidget* const parent )
         } );
 
     QObject::connect( m_universePathFromButton, &QPushButton::clicked,
-        this, [this]() {
-            const std::optional< UniversePathEndpoint_s > endpoint = PathEndpointSelection();
-
-            if ( !endpoint.has_value() )
-            {
-                m_hintLabel->setText( "Navigate to a function in IDA or "
-                    "choose a function in search first." );
-
-                return;
-            }
-
-            m_universePathFrom = endpoint->address;
-
-            const QString origin = endpoint->fromSearch
-                ? QStringLiteral( "search result" )
-                : QStringLiteral( "IDA cursor" );
-
-            m_universePathFromButton->setToolTip( QString( "Start: %1 (%2)" )
-                .arg( Ida_FormatAddress( static_cast< ea_t >( endpoint->address ) ) )
-                .arg( origin ) );
-
-            m_hintLabel->setText( QString( "Path start: %1 (%2). Navigate "
-                "to another function in IDA or choose a search result, "
-                "then click Find path to." )
-                .arg( Ida_FormatAddress( static_cast< ea_t >( endpoint->address ) ) )
-                .arg( origin ) );
-        } );
+        this, [this]() { SetUniversePathEndpoint( true ); } );
 
     QObject::connect( m_universePathToButton, &QPushButton::clicked,
-        this, [this]() {
-            if ( !m_universePathFrom.has_value() )
-            {
-                m_hintLabel->setText( "Choose Path from first." );
-                return;
-            }
-
-            const std::optional< UniversePathEndpoint_s > endpoint = PathEndpointSelection();
-
-            if ( !endpoint.has_value() )
-            {
-                m_hintLabel->setText( "Navigate to the destination in IDA "
-                    "or choose a search result." );
-
-                return;
-            }
-
-            if ( *m_universePathFrom == endpoint->address )
-            {
-                m_hintLabel->setText( "Path start and destination are the "
-                    "same function. Navigate to a different function in IDA "
-                    "or select another search result." );
-
-                return;
-            }
-
-            ShowUniversePath( *m_universePathFrom, endpoint->address );
-        } );
+        this, [this]() { SetUniversePathEndpoint( false ); } );
 
     QObject::connect( m_universeClearPathButton, &QPushButton::clicked,
         this, [this]() {
             ClearUniverseRoutes();
-            m_universePathFrom.reset();
-            m_universePathFromButton->setToolTip( QString() );
+            m_universePathEndpoints.Clear();
+            UpdateUniversePathToolTips();
             RenderCurrent();
             m_universePlot->ReframeToHubs();
+            m_hintLabel->setText( "Call path cleared. Set Path Start and "
+                "Set Path End in either order." );
         } );
 
     // Address text must never change the dock's minimum width.
@@ -1567,7 +1510,8 @@ CantorPanel::CantorPanel( QWidget* const parent )
         this, [this]( bool ) {
             m_universeLoaded = false;
             ClearUniverseRoutes();
-            m_universePathFrom.reset();
+            m_universePathEndpoints.Clear();
+            UpdateUniversePathToolTips();
             HideUniverseInspector();
             m_inspectorIndex = {};
             m_universeData = {};

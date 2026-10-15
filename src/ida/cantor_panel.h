@@ -61,6 +61,8 @@ private:
     void RefreshUniverseSearch();
     std::optional< u64 > SearchResultAddress() const;
     std::optional< UniversePathEndpoint_s > PathEndpointSelection() const;
+    void SetUniversePathEndpoint( bool isStart );
+    void UpdateUniversePathToolTips();
     void ShowUniversePath( u64 from, u64 to );
     void SelectUniverseRoute( int route );
     void OpenCommunity( u64 representative, bool overview );
@@ -245,7 +247,7 @@ private:
     std::optional< u64 > m_idaFunctionAddress;
     UniverseGraph_s m_detailUniverseGraph;
     std::unordered_map< u64, std::vector< u64 > > m_detailCommunities;
-    std::optional< u64 > m_universePathFrom;
+    UniversePathEndpoints_s m_universePathEndpoints;
     bool m_pathPreferSearchResult = false;
     UniverseCallPath_s m_universeActivePath;
     std::vector< UniverseCallPath_s > m_universeRoutes;

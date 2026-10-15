@@ -161,16 +161,18 @@ QJsonObject CantorPanel::CaptureInvestigation() const
 
     item.insert( "collapsed", collapsed );
 
-    if ( m_universeActivePath.addresses.size() >= 2 )
-    {
+    // Preserve either endpoint even when no route exists or only one has
+    // been chosen. This also allows bookmarks to resume end-first selection.
+    if ( m_universePathEndpoints.start.has_value() )
         item.insert( "pathFrom", QString::number(
-            static_cast< qulonglong >( m_universeActivePath.addresses.front() ), 16 ) );
+            static_cast< qulonglong >( *m_universePathEndpoints.start ), 16 ) );
 
+    if ( m_universePathEndpoints.end.has_value() )
         item.insert( "pathTo", QString::number(
-            static_cast< qulonglong >( m_universeActivePath.addresses.back() ), 16 ) );
+            static_cast< qulonglong >( *m_universePathEndpoints.end ), 16 ) );
 
+    if ( m_universeActivePath.addresses.size() >= 2 )
         item.insert( "pathRoute", static_cast< int >( m_universeSelectedRoute ) );
-    }
 
     return item;
 }
@@ -329,11 +331,25 @@ bool CantorPanel::RestoreInvestigation( const QJsonObject& item )
     const QString pathFrom = item.value( "pathFrom" ).toString();
     const QString pathTo = item.value( "pathTo" ).toString();
     ClearUniverseRoutes();
+    m_universePathEndpoints.Clear();
 
-    if ( !pathFrom.isEmpty() && !pathTo.isEmpty() )
+    bool validStart = false;
+    bool validEnd = false;
+    const u64 startAddress = pathFrom.toULongLong( &validStart, 16 );
+    const u64 endAddress = pathTo.toULongLong( &validEnd, 16 );
+
+    if ( validStart )
+        m_universePathEndpoints.SetStart( startAddress );
+
+    if ( validEnd )
+        m_universePathEndpoints.SetEnd( endAddress );
+
+    UpdateUniversePathToolTips();
+
+    if ( m_universePathEndpoints.Status() == UniversePathSelectionState_e::Ready )
     {
         m_universeRoutes = Universe_FindCallPaths( m_universeData,
-            pathFrom.toULongLong( nullptr, 16 ), pathTo.toULongLong( nullptr, 16 ) );
+            startAddress, endAddress );
 
         if ( !m_universeRoutes.empty() )
         {

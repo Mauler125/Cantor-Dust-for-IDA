@@ -171,6 +171,77 @@ std::optional< UniversePathEndpoint_s > CantorPanel::PathEndpointSelection() con
         SearchResultAddress(), m_pathPreferSearchResult );
 }
 
+void CantorPanel::UpdateUniversePathToolTips()
+{
+    const auto tooltip = []( const char* const button,
+        const std::optional< u64 > address ) {
+        QString text = QString( "Set Path %1 from the current IDA function "
+            "or a selected search result." ).arg( QString::fromLatin1( button ) );
+
+        if ( address.has_value() )
+        {
+            text += QString( " Current %1: 0x%2." )
+                .arg( QString::fromLatin1( button ) )
+                .arg( static_cast< qulonglong >( *address ), 0, 16 );
+        }
+
+        return text;
+    };
+
+    m_universePathFromButton->setToolTip(
+        tooltip( "Start", m_universePathEndpoints.start ) );
+    m_universePathToButton->setToolTip(
+        tooltip( "End", m_universePathEndpoints.end ) );
+}
+
+void CantorPanel::SetUniversePathEndpoint( const bool isStart )
+{
+    const std::optional< UniversePathEndpoint_s > endpoint = PathEndpointSelection();
+
+    if ( !endpoint.has_value() )
+    {
+        m_hintLabel->setText( "Navigate to a function in IDA or select "
+            "a search result before setting a call path endpoint." );
+        return;
+    }
+
+    const UniversePathSelectionState_e state = isStart
+        ? m_universePathEndpoints.SetStart( endpoint->address )
+        : m_universePathEndpoints.SetEnd( endpoint->address );
+
+    UpdateUniversePathToolTips();
+    const QString chosenLabel = isStart ? QStringLiteral( "Start" )
+        : QStringLiteral( "End" );
+    const QString otherLabel = isStart ? QStringLiteral( "End" )
+        : QStringLiteral( "Start" );
+    const QString origin = endpoint->fromSearch
+        ? QStringLiteral( "search result" ) : QStringLiteral( "IDA cursor" );
+
+    if ( state == UniversePathSelectionState_e::Waiting )
+    {
+        m_hintLabel->setText( QString( "Path %1: 0x%2 (%3). "
+            "Set Path %4 to find directed call routes." )
+            .arg( chosenLabel )
+            .arg( static_cast< qulonglong >( endpoint->address ), 0, 16 )
+            .arg( origin )
+            .arg( otherLabel ) );
+        return;
+    }
+
+    if ( state == UniversePathSelectionState_e::SameFunction )
+    {
+        ClearUniverseRoutes();
+        RenderCurrent();
+        m_hintLabel->setText( "Path Start and Path End are the same "
+            "function. Choose a different function with either action." );
+        return;
+    }
+
+    // Both endpoints are now available, regardless of selection order.
+    ShowUniversePath( *m_universePathEndpoints.start,
+        *m_universePathEndpoints.end );
+}
+
 void CantorPanel::ClearUniverseRoutes()
 {
     m_universeActivePath = {};
@@ -282,16 +353,16 @@ void CantorPanel::ShowUniversePath( const u64 from,
 {
     LoadUniverse();
     std::vector< UniverseCallPath_s > routes = Universe_FindCallPaths( m_universeData, from, to, 5 );
+    ClearUniverseRoutes();
 
     if ( routes.empty() )
     {
+        // A failed new search must not leave the previous route on screen.
+        RenderCurrent();
         m_hintLabel->setText( "No directed call path in extracted references. "
-            "Indirect calls may be absent." );
-
+            "Indirect calls may be absent. Change Set Path Start or Set Path End." );
         return;
     }
-
-    ClearUniverseRoutes();
     m_universeRoutes = std::move( routes );
     m_universeActivePath = m_universeRoutes.front();
     {

@@ -325,6 +325,44 @@ std::optional< UniversePathEndpoint_s > Universe_ChoosePathEndpoint(
     std::optional< u64 > searchResult,
     bool preferSearch );
 
+// Start and end are chosen independently. Route search is ready only after
+// both have been selected, regardless of which one was set first.
+enum class UniversePathSelectionState_e { Waiting, SameFunction, Ready };
+
+struct UniversePathEndpoints_s
+{
+    std::optional< u64 > start;
+    std::optional< u64 > end;
+
+    UniversePathSelectionState_e Status() const
+    {
+        if ( !start.has_value() || !end.has_value() )
+            return UniversePathSelectionState_e::Waiting;
+
+        return *start == *end
+            ? UniversePathSelectionState_e::SameFunction
+            : UniversePathSelectionState_e::Ready;
+    }
+
+    UniversePathSelectionState_e SetStart( const u64 address )
+    {
+        start = address;
+        return Status();
+    }
+
+    UniversePathSelectionState_e SetEnd( const u64 address )
+    {
+        end = address;
+        return Status();
+    }
+
+    void Clear()
+    {
+        start.reset();
+        end.reset();
+    }
+};
+
 // Directed shortest path over known function-to-function call references.
 UniverseCallPath_s Universe_FindCallPath(
     const UniverseData_s& data, u64 from, u64 to );
