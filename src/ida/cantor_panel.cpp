@@ -157,6 +157,7 @@ CantorPanel::CantorPanel( QWidget* const parent )
     , m_idaFollowTimer( new QTimer( this ) )
     , m_universeNodeBudgetEdit( new QSpinBox( m_settingsDialog ) )
     , m_universeLinkBudgetEdit( new QSpinBox( m_settingsDialog ) )
+    , m_universeFanoutEdit( new QSpinBox( m_settingsDialog ) )
     , m_supplementalFeatures( new QWidget( this ) )
     , m_cubeFeaturesPanel( new QWidget( m_supplementalFeatures ) )
     , m_universeExplorerPanel( new QWidget( m_supplementalFeatures ) )
@@ -655,6 +656,21 @@ CantorPanel::CantorPanel( QWidget* const parent )
         "direct connections are always retained." );
 
     explorerForm->addRow( "Link budget", m_universeLinkBudgetEdit );
+    m_universeFanoutEdit->setRange( 1,
+        CANTORDUST_UNIVERSE_HOP_MAX_FANOUT );
+
+    m_universeFanoutEdit->setSingleStep( 128 );
+    m_universeFanoutEdit->setValue( std::clamp( settings.value(
+        "explorerFanout", static_cast< int >(
+            CANTORDUST_UNIVERSE_HOP_DEFAULT_FANOUT ) ).toInt(), 1,
+        static_cast< int >( CANTORDUST_UNIVERSE_HOP_MAX_FANOUT ) ) );
+
+    m_universeFanoutEdit->setToolTip(
+        "Maximum newly discovered functions added per expanded node at "
+        "hops 2-10. The global node and link budgets still apply." );
+
+    explorerForm->addRow( "Neighbors per function", m_universeFanoutEdit );
+
     // Passive highlighting remains on regardless of this toolbar toggle.
     // Follow IDA is opt-in and its state persists across plugin restarts.
     m_followIdaToggle->setChecked(
@@ -686,9 +702,9 @@ CantorPanel::CantorPanel( QWidget* const parent )
         "Follow IDA is in Navigate and the quick controls. When off, IDA navigation "
         "highlights visible function nodes without moving the graph. "
         "Hops 1-10 are selected in the main explorer. These budgets limit "
-        "graph growth at hops 2-10; at most 1024 new functions are added "
-        "per expanded node. A limit warning appears in the detail status "
-        "when expansion is cut short. Increasing budgets may slow "
+        "graph growth at hops 2-10. Neighbors per function limits new "
+        "nodes on each expanded branch. A limit warning appears in the "
+        "detail status when expansion is cut short. Increasing budgets may slow "
         "rendering for large binaries.", explorerPage );
 
     explorerHelp->setWordWrap( true );
@@ -710,6 +726,16 @@ CantorPanel::CantorPanel( QWidget* const parent )
         [this]( const int value ) {
             QSettings( "CantorDust", "IDA" ).setValue(
                 "explorerLinkBudget", value );
+
+            if ( m_universeFocusAddress.has_value() )
+                RenderCurrent();
+        } );
+
+    QObject::connect( m_universeFanoutEdit,
+        QOverload< int >::of( &QSpinBox::valueChanged ), this,
+        [this]( const int value ) {
+            QSettings( "CantorDust", "IDA" ).setValue(
+                "explorerFanout", value );
 
             if ( m_universeFocusAddress.has_value() )
                 RenderCurrent();

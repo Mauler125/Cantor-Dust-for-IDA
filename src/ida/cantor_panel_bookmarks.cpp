@@ -130,6 +130,7 @@ QJsonObject CantorPanel::CaptureInvestigation() const
     item.insert( "clusters", m_universeClusterToggle->isChecked() );
     item.insert( "nodeBudget", m_universeNodeBudgetEdit->value() );
     item.insert( "linkBudget", m_universeLinkBudgetEdit->value() );
+    item.insert( "fanout", m_universeFanoutEdit->value() );
     item.insert( "hideImports", m_filterImports->isChecked() );
     item.insert( "hideThunks", m_filterThunks->isChecked() );
     item.insert( "hideLibraries", m_filterLibraries->isChecked() );
@@ -250,6 +251,7 @@ bool CantorPanel::RestoreInvestigation( const QJsonObject& item )
         const QSignalBlocker blockCluster( m_universeClusterToggle );
         const QSignalBlocker blockNodeBudget( m_universeNodeBudgetEdit );
         const QSignalBlocker blockLinkBudget( m_universeLinkBudgetEdit );
+        const QSignalBlocker blockFanout( m_universeFanoutEdit );
         m_universeFocusRangeToggle->setChecked( item.value( "focusRange" ).toBool() );
         m_universeRangeHeatToggle->setChecked( item.value( "rangeHeat" ).toBool( true ) );
         m_universeSearchEdit->setText( item.value( "search" ).toString() );
@@ -260,6 +262,9 @@ bool CantorPanel::RestoreInvestigation( const QJsonObject& item )
             static_cast< int >( CANTORDUST_UNIVERSE_HOP_DEFAULT_FUNCTIONS ) ) );
         m_universeLinkBudgetEdit->setValue( item.value( "linkBudget" ).toInt(
             static_cast< int >( CANTORDUST_UNIVERSE_HOP_DEFAULT_LINKS ) ) );
+        // Older bookmarks have no fanout field; retain the current setting.
+        m_universeFanoutEdit->setValue( item.value( "fanout" ).toInt(
+            m_universeFanoutEdit->value() ) );
 
         const QSignalBlocker blockImports( m_filterImports );
         const QSignalBlocker blockThunks( m_filterThunks );

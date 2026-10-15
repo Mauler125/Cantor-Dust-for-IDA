@@ -448,7 +448,8 @@ void CantorPanel::RebuildDetailUniverse()
             m_universeFocusRangeToggle->isChecked() ? &windows : nullptr,
             distinct, m_globalFieldsToggle->isChecked(), &collapsed,
             { static_cast< usize >( m_universeNodeBudgetEdit->value() ),
-              static_cast< usize >( m_universeLinkBudgetEdit->value() ) } );
+              static_cast< usize >( m_universeLinkBudgetEdit->value() ),
+              static_cast< usize >( m_universeFanoutEdit->value() ) } );
 
         m_detailUniverseGraph = Universe_FilterGraphAdvanced(
             m_detailUniverseGraph, m_universeData, CurrentAdvancedFilters() );

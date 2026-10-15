@@ -19,7 +19,8 @@ static_assert( CANTORDUST_UNIVERSE_HOP_DEFAULT_FUNCTIONS == 8192u );
 static_assert( CANTORDUST_UNIVERSE_HOP_MAX_FUNCTIONS == 16384u );
 static_assert( CANTORDUST_UNIVERSE_HOP_DEFAULT_LINKS == 32768u );
 static_assert( CANTORDUST_UNIVERSE_HOP_MAX_LINKS == 65536u );
-static_assert( CANTORDUST_UNIVERSE_HOP_MAX_FANOUT == 1024u );
+static_assert( CANTORDUST_UNIVERSE_HOP_DEFAULT_FANOUT == 1024u );
+static_assert( CANTORDUST_UNIVERSE_HOP_MAX_FANOUT == 4096u );
 
 static UniverseData_s Fixture()
 {
@@ -674,13 +675,13 @@ static void TestDeepExplorationBudgets()
     assert( exhausted.focusDepthReached == 3 &&
         exhausted.focusDepthRequested == 10 && !exhausted.truncated );
 
-    // A branch fanout safeguard is reported separately from user budgets.
+    // Configurable branch fanout is reported separately from node/link budgets.
     UniverseData_s fanout;
     fanout.functions.push_back({ 0x1000, "root" });
     fanout.functions.push_back({ 0x2000, "branch" });
     fanout.references.push_back({ 0x1000, 0x2000, 0x1010 });
 
-    for ( std::uint64_t i = 0; i < CANTORDUST_UNIVERSE_HOP_MAX_FANOUT + 1u; ++i )
+    for ( std::uint64_t i = 0; i < CANTORDUST_UNIVERSE_HOP_DEFAULT_FANOUT + 1u; ++i )
     {
         const std::uint64_t address = 0x3000 + i * 0x100;
         fanout.functions.push_back({ address, "leaf" });
@@ -692,21 +693,65 @@ static void TestDeepExplorationBudgets()
         nullptr, { 4096, 4096 } );
 
     assert( cappedFanout.nodes.size() ==
-        CANTORDUST_UNIVERSE_HOP_MAX_FANOUT + 2 );
+        CANTORDUST_UNIVERSE_HOP_DEFAULT_FANOUT + 2 );
     assert( cappedFanout.focusDepthReached == 2 );
     assert( cappedFanout.focusFanoutLimitReached &&
         !cappedFanout.focusNodeLimitReached &&
         !cappedFanout.focusLinkLimitReached );
 
     // Exactly 1024 new children is permitted without a fanout warning.
-    fanout.functions.resize( CANTORDUST_UNIVERSE_HOP_MAX_FANOUT + 2 );
-    fanout.references.resize( CANTORDUST_UNIVERSE_HOP_MAX_FANOUT + 1 );
+    fanout.functions.resize( CANTORDUST_UNIVERSE_HOP_DEFAULT_FANOUT + 2 );
+    fanout.references.resize( CANTORDUST_UNIVERSE_HOP_DEFAULT_FANOUT + 1 );
     const UniverseGraph_s exactFanout = Universe_FocusMultiHopFromData(
         fanout, 0x1000, UFM_CALLEES, 10, nullptr, true, false,
         nullptr, { 4096, 4096 } );
     assert( exactFanout.nodes.size() ==
-        CANTORDUST_UNIVERSE_HOP_MAX_FANOUT + 2 );
+        CANTORDUST_UNIVERSE_HOP_DEFAULT_FANOUT + 2 );
     assert( !exactFanout.truncated && !exactFanout.focusFanoutLimitReached );
+
+    // Smaller and larger per-function limits are both respected without
+    // changing the global budgets. A user can expand beyond 1024.
+    fanout.functions.push_back({ 0x3000 +
+        CANTORDUST_UNIVERSE_HOP_DEFAULT_FANOUT * 0x100ull, "extra" });
+    fanout.references.push_back({ 0x2000, 0x3000 +
+        CANTORDUST_UNIVERSE_HOP_DEFAULT_FANOUT * 0x100ull, 0x3000 });
+    const UniverseGraph_s smallerFanout = Universe_FocusMultiHopFromData(
+        fanout, 0x1000, UFM_CALLEES, 10, nullptr, true, false,
+        nullptr, { 8192, 8192, 64 } );
+    assert( smallerFanout.nodes.size() == 66 );
+    assert( smallerFanout.focusFanoutLimitReached &&
+        !smallerFanout.focusNodeLimitReached &&
+        !smallerFanout.focusLinkLimitReached );
+
+    const UniverseGraph_s largerFanout = Universe_FocusMultiHopFromData(
+        fanout, 0x1000, UFM_CALLEES, 10, nullptr, true, false,
+        nullptr, { 8192, 8192, 2048 } );
+    assert( largerFanout.nodes.size() ==
+        CANTORDUST_UNIVERSE_HOP_DEFAULT_FANOUT + 3 );
+    assert( !largerFanout.truncated &&
+        !largerFanout.focusFanoutLimitReached );
+
+    // Settings beyond the hard ceiling are clamped in the portable core.
+    UniverseData_s ceiling;
+    ceiling.functions.push_back({ 0x1000, "root" });
+    ceiling.functions.push_back({ 0x2000, "branch" });
+    ceiling.references.push_back({ 0x1000, 0x2000, 0x1010 });
+
+    for ( std::uint64_t i = 0; i <= CANTORDUST_UNIVERSE_HOP_MAX_FANOUT; ++i )
+    {
+        const std::uint64_t leaf = 0x100000 + i * 0x100;
+        ceiling.functions.push_back({ leaf, "leaf" });
+        ceiling.references.push_back({ 0x2000, leaf, 0x2010 + i });
+    }
+
+    const UniverseGraph_s clampedFanout = Universe_FocusMultiHopFromData(
+        ceiling, 0x1000, UFM_CALLEES, 10, nullptr, true, false,
+        nullptr, { 8192, 8192, 8192 } );
+    assert( clampedFanout.nodes.size() ==
+        CANTORDUST_UNIVERSE_HOP_MAX_FANOUT + 2 );
+    assert( clampedFanout.focusFanoutLimitReached &&
+        !clampedFanout.focusNodeLimitReached &&
+        !clampedFanout.focusLinkLimitReached );
 }
 
 static void TestHighLinkBudget()

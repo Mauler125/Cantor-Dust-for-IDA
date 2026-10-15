@@ -128,7 +128,8 @@ void CantorPanel::RenderCurrent()
                 reasons << "links";
 
             if ( focus.focusFanoutLimitReached )
-                reasons << "1024/branch";
+                reasons << QString( "%1/branch" ).arg(
+                    m_universeFanoutEdit->value() );
 
             if ( !reasons.isEmpty() )
                 summary += " | Limit reached (" + reasons.join( ", " ) + ")";

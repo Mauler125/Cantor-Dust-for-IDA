@@ -143,6 +143,7 @@ private:
     QTimer* const m_idaFollowTimer;
     QSpinBox* const m_universeNodeBudgetEdit;
     QSpinBox* const m_universeLinkBudgetEdit;
+    QSpinBox* const m_universeFanoutEdit;
     QWidget* const m_supplementalFeatures;
     QWidget* const m_cubeFeaturesPanel;
     QWidget* const m_universeExplorerPanel;

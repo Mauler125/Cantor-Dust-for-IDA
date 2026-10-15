@@ -15,21 +15,27 @@ foreach(_text IN ITEMS
     "storedLinkBudget == 35000"
     "storedNodeBudget == 768"
     "storedLinkBudget == 3500"
-    "1024 new functions")
+    "CANTORDUST_UNIVERSE_HOP_DEFAULT_FANOUT"
+    "CANTORDUST_UNIVERSE_HOP_MAX_FANOUT"
+    "explorerFanout"
+    "Neighbors per function")
     string(FIND "${_panel}" "${_text}" _position)
     if(_position EQUAL -1)
         message(FATAL_ERROR "Missing expanded hop settings wiring: ${_text}")
     endif()
 endforeach()
 
-string(FIND "${_status}" "reasons << \"1024/branch\";" _status_position)
+string(FIND "${_status}" "m_universeFanoutEdit->value()" _status_position)
 if(_status_position EQUAL -1)
     message(FATAL_ERROR "Hop truncation status does not match the new fanout")
 endif()
 
 foreach(_text IN ITEMS
     "CANTORDUST_UNIVERSE_HOP_DEFAULT_FUNCTIONS"
-    "CANTORDUST_UNIVERSE_HOP_DEFAULT_LINKS")
+    "CANTORDUST_UNIVERSE_HOP_DEFAULT_LINKS"
+    "m_universeFanoutEdit"
+    "item.insert( \"fanout\""
+    "item.value( \"fanout\"")
     string(FIND "${_bookmarks}" "${_text}" _position)
     if(_position EQUAL -1)
         message(FATAL_ERROR "Bookmark default is out of sync: ${_text}")
