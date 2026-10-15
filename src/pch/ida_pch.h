@@ -1,10 +1,10 @@
 #ifndef CANTORDUST_IDA_PCH_H
 #define CANTORDUST_IDA_PCH_H
 
-// Separate PCH for the IDA/Qt plugin. Avoid IDA SDK headers here: the SDK
-// owns its compiler configuration and its headers should stay explicit at
-// their points of use. The Qt headers use the target's IDA-compatible Qt
-// namespace/defines and must not be shared with the portable core or tests.
+// Shared implementation includes for the native IDA/Qt plugin. This header
+// works as a normal include with PCH disabled. Avoid IDA SDK headers here:
+// they stay explicit at the points of use. Qt headers depend on the target's
+// IDA-compatible namespace and must not be shared with portable mock tests.
 #include "core_pch.h"
 
 #include <QCursor>

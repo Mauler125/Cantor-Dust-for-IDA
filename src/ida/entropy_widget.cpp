@@ -1,12 +1,9 @@
+#include "pch/ida_pch.h"
 #include "ida/entropy_widget.h"
 #include "cantordust/scalar_types.h"
 #include "ida/range_selection_style.h"
 
 #include "math/color.h"
-
-#include <algorithm>
-#include <cstdint>
-#include <utility>
 
 namespace cantordust
 {

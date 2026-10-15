@@ -1,7 +1,7 @@
+#include "pch/core_pch.h"
 #include "math/hilbert.h"
 #include "cantordust/scalar_types.h"
 
-#include <algorithm>
 #include <stdexcept>
 
 namespace cantordust

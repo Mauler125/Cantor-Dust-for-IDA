@@ -2,8 +2,8 @@
 #define CANTORDUST_CORE_PCH_H
 
 // Shared, stable standard-library includes used throughout the portable core.
-// Keep public and internal headers self-contained: the PCH is an optional
-// build optimization, not a replacement for each file's direct includes.
+// Implementation files include this header explicitly so PCH-disabled builds
+// remain valid. Keep public and internal headers self-contained.
 #include <algorithm>
 #include <array>
 #include <cmath>

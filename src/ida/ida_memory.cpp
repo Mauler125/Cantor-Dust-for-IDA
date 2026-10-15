@@ -1,11 +1,11 @@
+// Also compiled in portable SDK-mock tests, without Qt headers.
+#include "pch/core_pch.h"
 #include "ida/ida_memory.h"
 #include "cantordust/scalar_types.h"
 
 #include "math/window.h"
 
 #include <bytes.hpp>
-
-#include <algorithm>
 
 #define CANTORDUST_OVERVIEW_SAMPLE_BUDGET 1048576u
 

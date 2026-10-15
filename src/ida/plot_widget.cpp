@@ -1,3 +1,4 @@
+#include "pch/ida_pch.h"
 #include "ida/plot_widget.h"
 #include "cantordust/scalar_types.h"
 #include "ida/range_selection_style.h"
@@ -5,10 +6,7 @@
 #include "math/pixel.h"
 #include "math/hilbert.h"
 
-#include <algorithm>
-#include <cstdint>
 #include <QRegion>
-#include <utility>
 
 namespace cantordust
 {

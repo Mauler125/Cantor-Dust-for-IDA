@@ -1,3 +1,5 @@
+// Also compiled in portable SDK-mock tests, without Qt headers.
+#include "pch/core_pch.h"
 #include "ida/ida_universe.h"
 #include "cantordust/scalar_types.h"
 
@@ -8,11 +10,7 @@
 #include <bytes.hpp>
 #include <name.hpp>
 #include <segment.hpp>
-#include <unordered_set>
 
-#include <vector>
-#include <algorithm>
-#include <cstdint>
 #include <sstream>
 #include <iomanip>
 

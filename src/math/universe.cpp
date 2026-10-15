@@ -1,10 +1,8 @@
+#include "pch/core_pch.h"
 #include "math/universe.h"
 #include "cantordust/scalar_types.h"
 
 #include "cantordust/constants.h"
-
-#include <algorithm>
-#include <cmath>
 
 namespace cantordust
 {

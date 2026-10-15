@@ -1,3 +1,4 @@
+#include "pch/core_pch.h"
 #include "cantordust/universe.h"
 #include "cantordust/scalar_types.h"
 #include "cantordust/constants.h"
@@ -5,14 +6,8 @@
 #include "math/cube.h"
 #include "math/color.h"
 
-#include <algorithm>
-#include <cmath>
-#include <cstdint>
 #include <iomanip>
-#include <numeric>
 #include <sstream>
-#include <string>
-#include <vector>
 
 namespace cantordust
 {

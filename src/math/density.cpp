@@ -1,8 +1,6 @@
+#include "pch/core_pch.h"
 #include "math/density.h"
 #include "cantordust/scalar_types.h"
-
-#include <algorithm>
-#include <cmath>
 
 namespace cantordust
 {

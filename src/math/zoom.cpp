@@ -1,11 +1,8 @@
+#include "pch/core_pch.h"
 #include "math/zoom.h"
 #include "cantordust/scalar_types.h"
 
 #include "math/window.h"
-
-#include <algorithm>
-#include <cstdint>
-#include <limits>
 
 #define CANTORDUST_ZOOM_RATIO_STEPS 1000000u
 #define CANTORDUST_ZOOM_MAX_WHEEL_STEPS 32

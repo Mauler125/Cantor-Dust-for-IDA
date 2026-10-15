@@ -1,16 +1,11 @@
+#include "pch/ida_pch.h"
 #include "ida/cube_widget.h"
 #include "cantordust/scalar_types.h"
 
 #include "math/cube.h"
 
 #include <QMouseEvent>
-#include <QWheelEvent>
 #include <QResizeEvent>
-#include <QPainter>
-
-#include <algorithm>
-#include <cmath>
-#include <utility>
 
 namespace cantordust
 {

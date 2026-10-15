@@ -1,10 +1,9 @@
+#include "pch/ida_pch.h"
 #include "ida/cantor_panel.h"
 
-#include <QtWidgets>
 #include <QPointer>
 #include <QIcon>
 
-#include <vector>
 
 #include <ida.hpp>
 #include <idp.hpp>

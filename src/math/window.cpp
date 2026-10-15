@@ -1,7 +1,6 @@
+#include "pch/core_pch.h"
 #include "math/window.h"
 #include "cantordust/scalar_types.h"
-
-#include <algorithm>
 
 namespace cantordust
 {

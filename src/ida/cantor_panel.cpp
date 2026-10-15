@@ -1,3 +1,4 @@
+#include "pch/ida_pch.h"
 #include "ida/cantor_panel.h"
 #include "ida/cantor_panel_detail.h"
 #include "ida/universe_search_layout.h"
@@ -19,33 +20,12 @@
 #include <segment.hpp>
 #include <netnode.hpp>
 
-#include <QTimer>
-#include <QSettings>
-#include <QPainter>
-#include <QPixmap>
-#include <QRegularExpressionValidator>
-#include <QWheelEvent>
-#include <QToolTip>
-#include <QCursor>
-#include <QJsonDocument>
-#include <QInputDialog>
-#include <QFileDialog>
-#include <QFileInfo>
-#include <QSaveFile>
-#include <QMessageBox>
-#include <QSignalBlocker>
 #include <QMenuBar>
 #include <QScrollArea>
 #include <QEvent>
 #include <QScreen>
 
-#include <cmath>
-
-#include <algorithm>
-#include <cstdint>
 #include <cstdlib>
-#include <limits>
-#include <utility>
 
 namespace cantordust
 {

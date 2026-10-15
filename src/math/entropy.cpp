@@ -1,9 +1,6 @@
+#include "pch/core_pch.h"
 #include "math/entropy.h"
 #include "cantordust/scalar_types.h"
-
-#include <algorithm>
-#include <array>
-#include <cmath>
 
 namespace cantordust
 {

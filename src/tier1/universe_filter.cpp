@@ -1,11 +1,6 @@
+#include "pch/core_pch.h"
 #include "cantordust/universe.h"
 #include "cantordust/scalar_types.h"
-
-#include <algorithm>
-#include <cstdint>
-#include <queue>
-#include <unordered_map>
-#include <vector>
 
 namespace cantordust
 {

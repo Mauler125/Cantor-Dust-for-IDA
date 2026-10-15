@@ -1,9 +1,8 @@
+#include "pch/core_pch.h"
 #include "math/raster_fit.h"
 
 #include "math/hilbert.h"
 
-#include <algorithm>
-#include <cmath>
 #include <cstdlib>
 #include <stdexcept>
 

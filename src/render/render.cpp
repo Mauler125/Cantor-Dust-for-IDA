@@ -1,3 +1,4 @@
+#include "pch/core_pch.h"
 #include "cantordust/renderer.h"
 #include "cantordust/scalar_types.h"
 
@@ -6,8 +7,6 @@
 #include "math/hilbert.h"
 #include "tier0/compiler.h"
 
-#include <algorithm>
-#include <array>
 #include <stdexcept>
 
 namespace cantordust

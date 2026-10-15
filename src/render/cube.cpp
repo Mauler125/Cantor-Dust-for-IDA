@@ -1,3 +1,4 @@
+#include "pch/core_pch.h"
 #include "cantordust/cube.h"
 #include "cantordust/scalar_types.h"
 #include "cantordust/constants.h"
@@ -6,12 +7,6 @@
 #include "math/cube_lighting.h"
 #include "math/cube.h"
 #include "tier0/compiler.h"
-
-#include <algorithm>
-#include <array>
-#include <cmath>
-#include <limits>
-#include <vector>
 
 #define CANTORDUST_CUBE_VOXELS ( CANTORDUST_CUBE_GRID * \
     CANTORDUST_CUBE_GRID * CANTORDUST_CUBE_GRID )
