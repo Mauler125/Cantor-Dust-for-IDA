@@ -47,6 +47,7 @@ private:
     Palette_e CurrentOverviewPalette() const;
     usize WindowCapacity() const;
     void SyncRangeControl();
+    void UpdateWindowInfoLabel();
     void ListSegments( bool followCursor );
     void RebuildRanges();
     void PositionAtCursor();
@@ -215,6 +216,7 @@ private:
     u64 m_overviewSpan = 0;
     std::optional< u64 > m_exactRequestedOffset;
     usize m_byteCount = 0;
+    usize m_loadedCount = 0;
     // A logical selection can be much larger than the image pixel budget.
     // For large selections the image is sampled across the entire span and
     // source indices are absolute logical offsets (not indices into m_cells).

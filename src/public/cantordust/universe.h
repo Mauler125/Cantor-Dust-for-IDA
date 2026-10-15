@@ -17,6 +17,13 @@
 #define CANTORDUST_UNIVERSE_MAX_CANDIDATES 20000u
 #define CANTORDUST_UNIVERSE_MAX_REFERENCES 250000u
 
+// Multi-hop expansion has separate budgets from the ordinary universe tiers.
+#define CANTORDUST_UNIVERSE_HOP_MAX_FUNCTIONS 16384u
+#define CANTORDUST_UNIVERSE_HOP_MAX_LINKS 65536u
+#define CANTORDUST_UNIVERSE_HOP_DEFAULT_FUNCTIONS 8192u
+#define CANTORDUST_UNIVERSE_HOP_DEFAULT_LINKS 32768u
+#define CANTORDUST_UNIVERSE_HOP_MAX_FANOUT 1024u
+
 namespace cantordust
 {
 
@@ -272,14 +279,15 @@ struct UniverseExploreLimits_s
 {
     // Budget the *additional* exploration without dropping the original
     // first-hop graph, which may already be larger than either budget.
-    usize maxNodes = 768;
-    usize maxLinks = 3500;
+    usize maxNodes = CANTORDUST_UNIVERSE_HOP_DEFAULT_FUNCTIONS;
+    usize maxLinks = CANTORDUST_UNIVERSE_HOP_DEFAULT_LINKS;
 };
 
 // Extend the exact one-hop focus layout with bounded outward BFS branches.
 // A collapsed address keeps the node visible but suppresses its descendants.
-// Each expanded parent admits up to 24 new neighbors. The configurable graph
-// budgets are also capped by the renderer's maximums. Depth 1 matches legacy.
+// Each expanded parent admits up to 1024 new neighbors. The configurable
+// expansion budgets are capped separately from the ordinary tier budgets.
+// Depth 1 matches the legacy one-hop view.
 UniverseGraph_s Universe_FocusMultiHopFromData(
     const UniverseData_s& data, u64 address,
     UniverseFocusMode_e mode, u8 maxDepth,

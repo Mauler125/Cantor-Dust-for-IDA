@@ -254,8 +254,10 @@ bool CantorPanel::RestoreInvestigation( const QJsonObject& item )
         m_universeMinRefsEdit->setValue( item.value( "searchMinRefs" ).toInt() );
         m_universeFilterToggle->setChecked( item.value( "searchFilter" ).toBool() );
         m_universeClusterToggle->setChecked( item.value( "clusters" ).toBool() );
-        m_universeNodeBudgetEdit->setValue( item.value( "nodeBudget" ).toInt( 768 ) );
-        m_universeLinkBudgetEdit->setValue( item.value( "linkBudget" ).toInt( 3500 ) );
+        m_universeNodeBudgetEdit->setValue( item.value( "nodeBudget" ).toInt(
+            static_cast< int >( CANTORDUST_UNIVERSE_HOP_DEFAULT_FUNCTIONS ) ) );
+        m_universeLinkBudgetEdit->setValue( item.value( "linkBudget" ).toInt(
+            static_cast< int >( CANTORDUST_UNIVERSE_HOP_DEFAULT_LINKS ) ) );
 
         const QSignalBlocker blockImports( m_filterImports );
         const QSignalBlocker blockThunks( m_filterThunks );

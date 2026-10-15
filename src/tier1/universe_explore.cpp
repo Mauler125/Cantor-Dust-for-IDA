@@ -361,12 +361,12 @@ UniverseGraph_s Universe_FocusMultiHopFromData(
         return result;
 
     const usize maxNodes = std::min< usize >(
-        limits.maxNodes, CANTORDUST_UNIVERSE_MAX_FUNCTIONS );
+        limits.maxNodes, CANTORDUST_UNIVERSE_HOP_MAX_FUNCTIONS );
 
     const usize maxLinks = std::min< usize >(
-        limits.maxLinks, CANTORDUST_UNIVERSE_MAX_LINKS );
+        limits.maxLinks, CANTORDUST_UNIVERSE_HOP_MAX_LINKS );
 
-    constexpr usize maxAddedPerParent = 24;
+    constexpr usize maxAddedPerParent = CANTORDUST_UNIVERSE_HOP_MAX_FANOUT;
     std::unordered_set< u64 > disabled;
 
     if ( collapsed != nullptr )

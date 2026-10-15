@@ -254,7 +254,7 @@ void CantorPanel::SyncRangeControl()
 
     const QSignalBlocker blocker( m_rangeEdit );
     m_rangeEdit->setText( QString::number(
-        static_cast< qulonglong >( std::max< u64 >( m_detailSpan, 1u ) ) ) );
+        static_cast< qulonglong >( m_detailSpan ) ) );
 
     UpdateRangeAddressLabel();
 }
@@ -637,16 +637,19 @@ void CantorPanel::PositionAtCursor()
 void CantorPanel::ResetEmpty( const QString& message )
 {
     m_infoLabel->setText( message );
+    m_infoLabel->setToolTip( message );
     m_cells.clear();
     m_detailSampled = false;
     m_detailSampleOffsets.clear();
     m_detailSampleClasses.clear();
     m_detailCubeTriplets.clear();
     m_byteCount = 0;
+    m_loadedCount = 0;
     m_windowOffset = 0;
     m_detailSpan = 0;
     m_overviewSpan = 0;
     m_overviewOffset = 0;
+    SyncRangeControl();
     m_plot->SetImage( Render( CDV_LINEAR, {}, Resolution(), CurrentPalette() ) );
     m_cubePlot->SetCloud( {}, CurrentPalette() );
     m_overviewCube->SetCloud( {}, CurrentOverviewPalette() );
@@ -699,6 +702,11 @@ void CantorPanel::Reload()
         m_exactRequestedOffset.value_or( m_windowOffset ), maxOffset );
 
     m_exactRequestedOffset.reset();
+
+    // Refresh the editable range and address label from the final, clamped
+    // window. Horizontal wheel, navigation and bookmark restore all reload
+    // through here, not just vertical wheel zoom.
+    SyncRangeControl();
 
     const View_e mode = static_cast< View_e >(
         m_viewBox->currentData().toInt() );
@@ -780,7 +788,15 @@ void CantorPanel::Reload()
         }
     }
 
+    m_loadedCount = loadedCount;
     RenderCurrent();
+    UpdateWindowInfoLabel();
+}
+
+void CantorPanel::UpdateWindowInfoLabel()
+{
+    if ( m_totalLength == 0 || m_detailSpan == 0 )
+        return;
 
     u64 start = 0;
     u64 last = 0;
@@ -793,7 +809,7 @@ void CantorPanel::Reload()
             .arg( IsAllSegments() ? "All: " : "" )
             .arg( Ida_FormatAddress( start ) )
             .arg( Ida_FormatAddress( last ) )
-            .arg( static_cast< qulonglong >( loadedCount ) )
+            .arg( static_cast< qulonglong >( m_loadedCount ) )
             .arg( static_cast< qulonglong >( m_byteCount ) )
             .arg( static_cast< qulonglong >( m_totalLength ) ) +
         ( m_detailSampled ? QStringLiteral( " (sampled across selection)" )
@@ -814,6 +830,8 @@ void CantorPanel::Reload()
                     ? " | Focused connections (range only)" : " | Focused connections (global)" )
                 : " | Selected range" ) );
     }
+
+    m_infoLabel->setToolTip( m_infoLabel->text() );
 }
 
 } // namespace cantordust

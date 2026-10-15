@@ -128,7 +128,7 @@ void CantorPanel::RenderCurrent()
                 reasons << "links";
 
             if ( focus.focusFanoutLimitReached )
-                reasons << "24/branch";
+                reasons << "1024/branch";
 
             if ( !reasons.isEmpty() )
                 summary += " | Limit reached (" + reasons.join( ", " ) + ")";
@@ -484,7 +484,6 @@ void CantorPanel::WheelDetail(
     }
 
     m_detailSpan = next.length;
-    SyncRangeControl();
     SetWindowOffset( next.start );
 }
 
@@ -528,6 +527,9 @@ void CantorPanel::WheelOverview(
     m_overviewSpan = next.length;
     InvalidateOverviewSamples();
     RenderOverview();
+    // Overview wheel zoom does not reload Detail, but its byte count is
+    // shown in the shared status line and must not stay stale.
+    UpdateWindowInfoLabel();
 }
 
 void CantorPanel::Navigate( const usize index )

@@ -595,12 +595,29 @@ CantorPanel::CantorPanel( QWidget* const parent )
     QFormLayout* const explorerForm = new QFormLayout();
     explorerLayout->addLayout( explorerForm );
     m_universeNodeBudgetEdit->setRange( 64,
-        CANTORDUST_UNIVERSE_MAX_FUNCTIONS );
+        CANTORDUST_UNIVERSE_HOP_MAX_FUNCTIONS );
 
     m_universeNodeBudgetEdit->setSingleStep( 128 );
-    m_universeNodeBudgetEdit->setValue( std::clamp(
-        settings.value( "explorerNodeBudget", 768 ).toInt(), 64,
-        static_cast< int >( CANTORDUST_UNIVERSE_MAX_FUNCTIONS ) ) );
+    // Upgrade the old 768/3,500 and 7,680/35,000 defaults once while
+    // preserving custom budgets. The v2 marker distinguishes an old default
+    // from an intentional setting of 768 or 3,500 in newer installations.
+    const bool migratedBudgetsV2 = settings.value(
+        "explorerBudgetsV2", false ).toBool();
+    const bool migratedBudgetsV3 = settings.value(
+        "explorerBudgetsV3", false ).toBool();
+
+    const int storedNodeBudget = settings.value(
+        "explorerNodeBudget", static_cast< int >(
+            CANTORDUST_UNIVERSE_HOP_DEFAULT_FUNCTIONS ) ).toInt();
+
+    const bool previousNodeDefault = storedNodeBudget == 7680 ||
+        ( !migratedBudgetsV2 && storedNodeBudget == 768 );
+    const int nodeBudget = !migratedBudgetsV3 && previousNodeDefault
+        ? static_cast< int >( CANTORDUST_UNIVERSE_HOP_DEFAULT_FUNCTIONS )
+        : storedNodeBudget;
+
+    m_universeNodeBudgetEdit->setValue( std::clamp( nodeBudget, 64,
+        static_cast< int >( CANTORDUST_UNIVERSE_HOP_MAX_FUNCTIONS ) ) );
 
     m_universeNodeBudgetEdit->setToolTip(
         "Maximum visible nodes when adding hops. Existing direct neighbors "
@@ -608,12 +625,30 @@ CantorPanel::CantorPanel( QWidget* const parent )
 
     explorerForm->addRow( "Node budget", m_universeNodeBudgetEdit );
     m_universeLinkBudgetEdit->setRange( 128,
-        CANTORDUST_UNIVERSE_MAX_LINKS );
+        CANTORDUST_UNIVERSE_HOP_MAX_LINKS );
 
-    m_universeLinkBudgetEdit->setSingleStep( 500 );
-    m_universeLinkBudgetEdit->setValue( std::clamp(
-        settings.value( "explorerLinkBudget", 3500 ).toInt(), 128,
-        static_cast< int >( CANTORDUST_UNIVERSE_MAX_LINKS ) ) );
+    m_universeLinkBudgetEdit->setSingleStep( 512 );
+    const int storedLinkBudget = settings.value(
+        "explorerLinkBudget", static_cast< int >(
+            CANTORDUST_UNIVERSE_HOP_DEFAULT_LINKS ) ).toInt();
+
+    const bool previousLinkDefault = storedLinkBudget == 35000 ||
+        ( !migratedBudgetsV2 && storedLinkBudget == 3500 );
+    const int linkBudget = !migratedBudgetsV3 && previousLinkDefault
+        ? static_cast< int >( CANTORDUST_UNIVERSE_HOP_DEFAULT_LINKS )
+        : storedLinkBudget;
+
+    m_universeLinkBudgetEdit->setValue( std::clamp( linkBudget, 128,
+        static_cast< int >( CANTORDUST_UNIVERSE_HOP_MAX_LINKS ) ) );
+
+    if ( !migratedBudgetsV3 )
+    {
+        QSettings updated( "CantorDust", "IDA" );
+        updated.setValue( "explorerBudgetsV2", true );
+        updated.setValue( "explorerBudgetsV3", true );
+        updated.setValue( "explorerNodeBudget", m_universeNodeBudgetEdit->value() );
+        updated.setValue( "explorerLinkBudget", m_universeLinkBudgetEdit->value() );
+    }
 
     m_universeLinkBudgetEdit->setToolTip(
         "Maximum visible directed links when adding hops. Existing "
@@ -651,7 +686,7 @@ CantorPanel::CantorPanel( QWidget* const parent )
         "Follow IDA is in Navigate and the quick controls. When off, IDA navigation "
         "highlights visible function nodes without moving the graph. "
         "Hops 1-10 are selected in the main explorer. These budgets limit "
-        "graph growth at hops 2-10; at most 24 new functions are added "
+        "graph growth at hops 2-10; at most 1024 new functions are added "
         "per expanded node. A limit warning appears in the detail status "
         "when expansion is cut short. Increasing budgets may slow "
         "rendering for large binaries.", explorerPage );
