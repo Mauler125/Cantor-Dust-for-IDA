@@ -43,8 +43,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Ninja
+      # The setup action downloads an x86_64 Linux binary on ARM64 runners.
+      - name: Setup Ninja (non-Linux-ARM64)
+        if: runner.os != 'Linux' || runner.arch != 'ARM64'
         uses: seanmiddleditch/gha-setup-ninja@v5
+
+      - name: Install native Ninja (Linux ARM64)
+        if: runner.os == 'Linux' && runner.arch == 'ARM64'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build
+          ninja --version
 
       - name: Setup MSVC
         if: runner.os == 'Windows'
@@ -65,6 +74,13 @@ jobs:
       - name: Test
         if: matrix.run_tests
         run: ctest --test-dir build --output-on-failure
+
+      - name: Digraph stack regression (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          ulimit -s 1024
+          ctest --test-dir build -R '^precompute_render$' --output-on-failure
 
   clang-and-sanitizers:
     runs-on: ubuntu-24.04
