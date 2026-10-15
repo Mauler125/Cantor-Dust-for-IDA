@@ -133,6 +133,14 @@ void CantorPanel::ListSegments( const bool followCursor )
         target = 0;
     }
 
+    // ListSegments() also handles follow-cursor selection with Qt signals
+    // blocked. Apply the same fit reset as a manual segment change.
+    if ( target >= 0 && old.isValid() &&
+         m_segmentBox->itemData( target ) != old )
+    {
+        m_detailSpan = 0;
+    }
+
     m_segmentBox->setCurrentIndex( target );
 }
 
@@ -184,8 +192,23 @@ void CantorPanel::RebuildRanges()
         if ( segment != nullptr && segment->end_ea > segment->start_ea &&
              Ida_SupportsEightBitBytes( segment->start_ea ) )
         {
-            Math_AddRange( m_ranges, segment->start_ea,
-                segment->end_ea - segment->start_ea );
+            // Exclude uninitialized padding at the beginning and end of
+            // a segment. Otherwise a small, populated segment can appear
+            // mostly empty and users can zoom out into that empty padding.
+            // Keep wholly uninitialized segments available for inspection.
+            ea_t begin = segment->start_ea;
+            ea_t end = segment->end_ea;
+            ea_t initializedBegin = BADADDR;
+            ea_t initializedEnd = BADADDR;
+
+            if ( Ida_InitializedExtent( begin, end,
+                     initializedBegin, initializedEnd ) )
+            {
+                begin = initializedBegin;
+                end = initializedEnd;
+            }
+
+            Math_AddRange( m_ranges, begin, end - begin );
         }
     }
 

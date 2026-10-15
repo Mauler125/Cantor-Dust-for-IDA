@@ -2,6 +2,8 @@
 #include "cantordust/renderer.h"
 #include "math/window.h"
 #include "math/hilbert.h"
+#include "math/raster_fit.h"
+#include "math/zoom.h"
 
 #ifdef NDEBUG
     #undef NDEBUG
@@ -405,6 +407,77 @@ static void Tests_HigherResolutionBudget()
     assert( g_probeCount <= 524288 );
 }
 
+static void Tests_SmallSegmentFitAndZoomLimit()
+{
+    using namespace cantordust;
+
+    // A segment can have a large virtual range around a small initialized
+    // region. The panel now fits that initialized region on selection.
+    constexpr ea_t segmentStart = 0x3000;
+    constexpr ea_t loadedStart = 0x3800;
+    constexpr usize count = 17;
+    g_loadedBytes.clear();
+    for ( usize i = 0; i < count; ++i )
+        g_loadedBytes[ loadedStart + i ] = static_cast< u8 >( 0x30 + i );
+
+    ea_t first = BADADDR;
+    ea_t end = BADADDR;
+    assert( Ida_InitializedExtent(
+        segmentStart, 0x8000, first, end ) );
+    assert( first == loadedStart && end == loadedStart + count );
+
+    std::vector< ByteRange_s > ranges;
+    assert( Math_AddRange( ranges, first, end - first ) );
+    const u64 fitLength = Math_RangeLength( ranges );
+    assert( fitLength == count );
+
+    const IdaWindow_s window = Ida_ReadWindowRanges(
+        ranges, 0, static_cast< usize >( fitLength ) );
+    assert( window.loadedCount == fitLength );
+
+    for ( const View_e mode : { CDV_LINEAR, CDV_HILBERT } )
+    {
+        const Image_s detail = RenderDetail(
+            mode, window.cells, 256 );
+        const FittedRaster_s fitted = Math_FitByteRaster(
+            detail, mode, 1400, 260 );
+        const Image_s& image = fitted.image;
+
+        // No blank tail in the default square view or after a wide resize.
+        for ( const usize ordinal : { 0u, 1u, 35000u, 65535u } )
+        {
+            const Point_s point = mode == CDV_HILBERT
+                ? Math_HilbertPosition( ordinal, 256 )
+                : Point_s{ ordinal % 256, ordinal / 256 };
+            assert( detail.SourceAt( point.x, point.y ) !=
+                CANTORDUST_NO_SOURCE );
+        }
+
+        for ( usize pixel = 0; pixel < image.sourceIndex.size(); ++pixel )
+            assert( image.sourceIndex[ pixel ] != CANTORDUST_NO_SOURCE );
+
+        // Repeated display pixels preserve real byte addresses, not a
+        // synthetic offset into the larger segment's padding.
+        const usize last = image.sourceIndex.back();
+        assert( last < count );
+        u64 address = 0;
+        assert( Math_OffsetToAddress( ranges, last, address ) );
+        assert( address >= loadedStart && address < loadedStart + count );
+    }
+
+    const ZoomRange_s fit{ 0, fitLength };
+    assert( Math_WheelZoom( fitLength, fit, 8, 1,
+        fitLength, -32 ).length == fitLength );
+    assert( Math_WheelZoom( fitLength, fit, 8, 1,
+        fitLength, -32 ).start == 0 );
+    const ZoomRange_s closer = Math_WheelZoom(
+        fitLength, fit, 8, 1, fitLength, 1 );
+    assert( closer.length < fitLength );
+    const ZoomRange_s back = Math_WheelZoom(
+        fitLength, closer, 8, 1, fitLength, -32 );
+    assert( back.start == 0 && back.length == fitLength );
+}
+
 int main()
 {
     Tests_InitializedExtents();
@@ -418,6 +491,7 @@ int main()
     Tests_RangeReadsAcrossGaps();
     Tests_LargeDetailSelectionSamplesEntireRange();
     Tests_HigherResolutionBudget();
+    Tests_SmallSegmentFitAndZoomLimit();
     std::cout << "IDA memory adapter mock tests passed.\n";
     return 0;
 }

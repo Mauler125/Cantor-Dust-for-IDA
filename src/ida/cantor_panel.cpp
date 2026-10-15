@@ -1440,7 +1440,10 @@ CantorPanel::CantorPanel( QWidget* const parent )
         m_segmentBox,
         QOverload< int >::of( &QComboBox::currentIndexChanged ),
         this, [this]( int ) {
+            // A segment change is a new view: start at the full content
+            // extent instead of inheriting the previous segment's zoom.
             m_windowOffset = 0;
+            m_detailSpan = 0;
             RebuildRanges();
             Reload();
         } );
