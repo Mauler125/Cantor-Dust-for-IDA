@@ -282,10 +282,20 @@ if(BUILD_TESTING)
             -DCANTORDUST_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/panel_supplemental_controls.cmake)
 
+    add_test(NAME universe_hop_budget_wiring
+        COMMAND ${CMAKE_COMMAND}
+            -DCANTORDUST_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/universe_hop_budget_wiring.cmake)
+
     add_test(NAME panel_overview_first_layout
         COMMAND ${CMAKE_COMMAND}
             -DCANTORDUST_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/panel_overview_first_layout.cmake)
+
+    add_test(NAME panel_call_path_endpoint_order
+        COMMAND ${CMAKE_COMMAND}
+            -DCANTORDUST_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/panel_call_path_endpoint_order.cmake)
 
     add_test(NAME panel_narrow_universe_layout
         COMMAND ${CMAKE_COMMAND}
@@ -320,6 +330,11 @@ if(BUILD_TESTING)
         COMMAND ${CMAKE_COMMAND}
             -DCANTORDUST_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/overview_range_wiring.cmake)
+
+    add_test(NAME detail_range_status_sync
+        COMMAND ${CMAKE_COMMAND}
+            -DCANTORDUST_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/detail_range_status_sync.cmake)
 endif()
 
 add_executable(cantordust_universe_benchmark tools/universe_benchmark.cpp)

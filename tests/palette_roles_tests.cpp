@@ -17,7 +17,9 @@ int main()
     assert( reference.background3d == 0xFF000000u );
     assert( reference.background == 0xFF151C28u ); // 2D unchanged
     assert( reference.selection == 0xFF39FF70u ); // original RGB selection green
-    assert( ghidra.selection == 0xFFEFFF24u ); // neon yellow
+    assert( ghidra.selection == 0xFF39FF70u ); // selected node is neon green
+    assert( ghidra.focusCallee == 0xFFEFFF24u ); // callee stays yellow
+    assert( ghidra.selection != ghidra.focusCallee );
     assert( reference.focusCallee == 0xFFFFFF00u ); // focused callee stays yellow
     assert( reference.selection != reference.focusCallee );
     assert( Universe_SelectionColor( CDP_REFERENCE ) == reference.selection );

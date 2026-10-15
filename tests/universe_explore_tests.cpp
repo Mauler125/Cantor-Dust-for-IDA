@@ -14,6 +14,13 @@
 
 using namespace cantordust;
 
+// Keep exploration limits in the agreed power-of-two tiers.
+static_assert( CANTORDUST_UNIVERSE_HOP_DEFAULT_FUNCTIONS == 8192u );
+static_assert( CANTORDUST_UNIVERSE_HOP_MAX_FUNCTIONS == 16384u );
+static_assert( CANTORDUST_UNIVERSE_HOP_DEFAULT_LINKS == 32768u );
+static_assert( CANTORDUST_UNIVERSE_HOP_MAX_LINKS == 65536u );
+static_assert( CANTORDUST_UNIVERSE_HOP_MAX_FANOUT == 1024u );
+
 static UniverseData_s Fixture()
 {
     UniverseData_s data;
@@ -504,13 +511,13 @@ static void TestMultiHopLimits()
     UniverseData_s data;
     data.functions.push_back({ 0x1000, "center" });
 
-    for ( std::uint32_t first = 0; first < 60; ++first )
+    for ( std::uint32_t first = 0; first < 100; ++first )
     {
         const std::uint64_t parent = 0x10000 + first * 0x100;
         data.functions.push_back({ parent, "parent" });
         data.references.push_back({ 0x1000, parent, 0x1010 + first });
 
-        for ( std::uint32_t child = 0; child < 60; ++child )
+        for ( std::uint32_t child = 0; child < 170; ++child )
         {
             const std::uint64_t address =
                 0x100000 + first * 0x10000 + child * 0x100;
@@ -523,11 +530,23 @@ static void TestMultiHopLimits()
     const UniverseGraph_s graph = Universe_FocusMultiHopFromData(
         data, 0x1000, UFM_CALLEES, 3 );
 
-    assert( graph.nodes.size() <= 768 );
-    assert( graph.nodes.size() > 60 );
-    assert( graph.links.size() <= 3500 );
-    assert( graph.truncated );
-    assert( graph.focusNodeLimitReached || graph.focusFanoutLimitReached );
+    // The 17,101-node tree exceeds both the new default and maximum
+    // exploration capacities, without hitting the per-parent fanout limit.
+    assert( graph.nodes.size() ==
+        CANTORDUST_UNIVERSE_HOP_DEFAULT_FUNCTIONS );
+    assert( graph.nodes.size() > CANTORDUST_UNIVERSE_MAX_FUNCTIONS );
+    assert( graph.links.size() <= CANTORDUST_UNIVERSE_HOP_DEFAULT_LINKS );
+    assert( graph.truncated && graph.focusNodeLimitReached );
+    assert( !graph.focusFanoutLimitReached );
+
+    const UniverseGraph_s expanded = Universe_FocusMultiHopFromData(
+        data, 0x1000, UFM_CALLEES, 3, nullptr, true, false, nullptr,
+        { CANTORDUST_UNIVERSE_HOP_MAX_FUNCTIONS,
+          CANTORDUST_UNIVERSE_HOP_MAX_LINKS } );
+
+    assert( expanded.nodes.size() ==
+        CANTORDUST_UNIVERSE_HOP_MAX_FUNCTIONS );
+    assert( expanded.focusNodeLimitReached && !expanded.focusFanoutLimitReached );
     // No dangling endpoints, duplicate node IDs or duplicate directed edges.
     std::unordered_set< std::uint64_t > addresses;
     std::unordered_set< std::uint64_t > links;
@@ -661,7 +680,7 @@ static void TestDeepExplorationBudgets()
     fanout.functions.push_back({ 0x2000, "branch" });
     fanout.references.push_back({ 0x1000, 0x2000, 0x1010 });
 
-    for ( std::uint64_t i = 0; i < 30; ++i )
+    for ( std::uint64_t i = 0; i < CANTORDUST_UNIVERSE_HOP_MAX_FANOUT + 1u; ++i )
     {
         const std::uint64_t address = 0x3000 + i * 0x100;
         fanout.functions.push_back({ address, "leaf" });
@@ -670,13 +689,74 @@ static void TestDeepExplorationBudgets()
 
     const UniverseGraph_s cappedFanout = Universe_FocusMultiHopFromData(
         fanout, 0x1000, UFM_CALLEES, 10, nullptr, true, false,
-        nullptr, { 200, 500 } );
+        nullptr, { 4096, 4096 } );
 
-    assert( cappedFanout.nodes.size() == 26 );
+    assert( cappedFanout.nodes.size() ==
+        CANTORDUST_UNIVERSE_HOP_MAX_FANOUT + 2 );
     assert( cappedFanout.focusDepthReached == 2 );
     assert( cappedFanout.focusFanoutLimitReached &&
         !cappedFanout.focusNodeLimitReached &&
         !cappedFanout.focusLinkLimitReached );
+
+    // Exactly 1024 new children is permitted without a fanout warning.
+    fanout.functions.resize( CANTORDUST_UNIVERSE_HOP_MAX_FANOUT + 2 );
+    fanout.references.resize( CANTORDUST_UNIVERSE_HOP_MAX_FANOUT + 1 );
+    const UniverseGraph_s exactFanout = Universe_FocusMultiHopFromData(
+        fanout, 0x1000, UFM_CALLEES, 10, nullptr, true, false,
+        nullptr, { 4096, 4096 } );
+    assert( exactFanout.nodes.size() ==
+        CANTORDUST_UNIVERSE_HOP_MAX_FANOUT + 2 );
+    assert( !exactFanout.truncated && !exactFanout.focusFanoutLimitReached );
+}
+
+static void TestHighLinkBudget()
+{
+    // Dense connections among already-discovered second-hop functions must
+    // not be clipped by the ordinary 20,000-link tier limit.
+    UniverseData_s data;
+    data.functions.push_back({ 0x1000, "root" });
+    data.functions.push_back({ 0x2000, "hub" });
+    data.references.push_back({ 0x1000, 0x2000, 0x1010 });
+
+    constexpr std::uint64_t leaves = 200;
+
+    for ( std::uint64_t i = 0; i < leaves; ++i )
+    {
+        const std::uint64_t address = 0x100000 + i * 0x100;
+        data.functions.push_back({ address, "leaf" });
+        data.references.push_back({ 0x2000, address, 0x2010 + i });
+    }
+
+    for ( std::uint64_t i = 0; i < leaves; ++i )
+    {
+        for ( std::uint64_t step = 1; step <= 190; ++step )
+        {
+            const std::uint64_t caller = 0x100000 + i * 0x100;
+            const std::uint64_t callee =
+                0x100000 + ( ( i + step ) % leaves ) * 0x100;
+
+            data.references.push_back({ caller, callee, caller + step });
+        }
+    }
+
+    const UniverseGraph_s standard = Universe_FocusMultiHopFromData(
+        data, 0x1000, UFM_CALLEES, 3 );
+
+    assert( standard.nodes.size() == leaves + 2 );
+    assert( standard.links.size() ==
+        CANTORDUST_UNIVERSE_HOP_DEFAULT_LINKS );
+    assert( standard.focusLinkLimitReached && standard.truncated );
+    assert( !standard.focusFanoutLimitReached &&
+        !standard.focusNodeLimitReached );
+
+    const UniverseGraph_s maximum = Universe_FocusMultiHopFromData(
+        data, 0x1000, UFM_CALLEES, 3, nullptr, true, false, nullptr,
+        { CANTORDUST_UNIVERSE_HOP_MAX_FUNCTIONS,
+          CANTORDUST_UNIVERSE_HOP_MAX_LINKS } );
+
+    assert( maximum.links.size() == 1 + leaves + leaves * 190 );
+    assert( maximum.links.size() > CANTORDUST_UNIVERSE_MAX_LINKS );
+    assert( !maximum.truncated && !maximum.focusLinkLimitReached );
 }
 
 static void TestAlternativePaths()
@@ -808,6 +888,48 @@ static void TestPathEndpointSelection()
         std::nullopt, std::nullopt, true ).has_value() );
 }
 
+static void TestPathEndpointOrder()
+{
+    constexpr std::uint64_t source = 0x1000u;
+    constexpr std::uint64_t destination = 0x3000u;
+    UniversePathEndpoints_s selection;
+    using State = UniversePathSelectionState_e;
+
+    // Start first, then end.
+    assert( selection.Status() == State::Waiting );
+    assert( selection.SetStart( source ) == State::Waiting );
+    assert( selection.start == source && !selection.end.has_value() );
+    assert( selection.SetEnd( destination ) == State::Ready );
+    assert( selection.start == source && selection.end == destination );
+    assert( !Universe_FindCallPath( Fixture(),
+        *selection.start, *selection.end ).addresses.empty() );
+
+    selection.Clear();
+    assert( selection.Status() == State::Waiting );
+    assert( !selection.start.has_value() && !selection.end.has_value() );
+
+    // End first, then start, with the same directed route.
+    assert( selection.SetEnd( destination ) == State::Waiting );
+    assert( selection.end == destination && !selection.start.has_value() );
+    assert( selection.SetStart( source ) == State::Ready );
+    assert( selection.start == source && selection.end == destination );
+    assert( !Universe_FindCallPath( Fixture(),
+        *selection.start, *selection.end ).addresses.empty() );
+
+    // Replacing either endpoint keeps the opposite endpoint intact.
+    assert( selection.SetEnd( source ) == State::SameFunction );
+    assert( selection.SetStart( 0x2000u ) == State::Ready );
+    assert( selection.start == 0x2000u && selection.end == source );
+    assert( selection.SetStart( source ) == State::SameFunction );
+    assert( selection.SetEnd( destination ) == State::Ready );
+    assert( selection.start == source && selection.end == destination );
+
+    selection.Clear();
+    assert( selection.SetEnd( destination ) == State::Waiting );
+    assert( selection.SetEnd( source ) == State::Waiting );
+    assert( selection.SetStart( source ) == State::SameFunction );
+}
+
 static void TestSearch()
 {
     const UniverseData_s data = Fixture();
@@ -844,9 +966,11 @@ int main()
     TestMultiHop();
     TestMultiHopLimits();
     TestDeepExplorationBudgets();
+    TestHighLinkBudget();
     TestPaths();
     TestAlternativePaths();
     TestPathEndpointSelection();
+    TestPathEndpointOrder();
     TestSearch();
     std::cout << "Universe explorer regressions passed\n";
 }

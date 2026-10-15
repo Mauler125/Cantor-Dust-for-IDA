@@ -405,7 +405,7 @@ static void Tests_RelativeHeatAndSelection()
         Universe_HeatColor( small, 0u, CDP_GHIDRA_VIOLET ) );
 
     assert( Universe_SelectionColor( CDP_REFERENCE ) == 0xFF39FF70u );
-    assert( Universe_SelectionColor( CDP_GHIDRA_VIOLET ) == 0xFFEFFF24u );
+    assert( Universe_SelectionColor( CDP_GHIDRA_VIOLET ) == 0xFF39FF70u );
 
     UniverseGraph_s graph;
     graph.nodes = {
