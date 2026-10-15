@@ -85,9 +85,14 @@ if(CANTORDUST_MAX_RELEASE_OPTIMIZATIONS AND NOT CANTORDUST_ENABLE_SANITIZERS)
     endif()
 
     if(MSVC)
-        # /O2 is part of MSVC's Release default. Add aggressive inlining,
-        # function/global sections and linker-level unused/identical COMDAT
-        # elimination. CMake's IPO property injects /GL and /LTCG.
+        # MSVC's default Release flags include /Ob2. Remove that inherited
+        # inlining level before adding /Ob3, otherwise cl.exe emits D9025
+        # for every translation unit. Keep /O2, /GL and /LTCG unchanged.
+        string(REGEX REPLACE "(^|[ \t])/Ob[0-3]([ \t]|$)" "\\1\\2"
+            CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
+        # Use the highest inlining level, function/global sections and
+        # linker-level dead/identical code elimination in Release only.
+        # CMake's IPO property injects /GL and /LTCG.
         add_compile_options(
             "$<$<CONFIG:Release>:/Ob3>"
             "$<$<CONFIG:Release>:/Gy>"
