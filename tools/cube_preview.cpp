@@ -76,17 +76,18 @@ bool LoadBytes( const char* const path, std::vector< ByteCell_s >& bytes )
 
 int main( const int argc, const char* const* const argv )
 {
-    if ( argc < 3 || argc > 6 )
+    if ( argc < 3 || argc > 7 )
     {
         std::cerr << "Usage: cantordust_cube_preview <binary-file> "
                   << "<output-prefix> [palette-index 0-15] "
-                  << "[brightness-percent] [size-percent]\n";
+                  << "[brightness-percent] [size-percent] [auto-brightness 0|1]\n";
         return 1;
     }
 
     int selected = 0;
     float brightnessPercent = 160.0f;
     float sizePercent = 100.0f;
+    bool autoBrightness = false;
 
     if ( argc >= 4 )
     {
@@ -131,6 +132,21 @@ int main( const int argc, const char* const* const argv )
         sizePercent = value;
     }
 
+
+    if ( argc >= 7 )
+    {
+        char* end = nullptr;
+        const long value = std::strtol( argv[ 6 ], &end, 10 );
+
+        if ( end == argv[ 6 ] || *end != '\0' || ( value != 0 && value != 1 ) )
+        {
+            std::cerr << "Invalid auto-brightness flag\n";
+            return 1;
+        }
+
+        autoBrightness = value != 0;
+    }
+
     std::vector< ByteCell_s > bytes;
     if ( !LoadBytes( argv[ 1 ], bytes ) )
     {
@@ -162,6 +178,7 @@ int main( const int argc, const char* const* const argv )
         options.geometry = mode.geometry;
         options.pointSize = sizePercent / 100.0f;
         options.brightness = brightnessPercent / 100.0f;
+        options.autoBrightness = autoBrightness;
 
         const Image_s image = Cube_Render( cloud, camera,
             1024u, 1024u, palette, options );

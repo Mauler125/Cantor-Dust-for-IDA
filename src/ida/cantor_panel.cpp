@@ -173,6 +173,7 @@ CantorPanel::CantorPanel( QWidget* const parent )
     , m_cubeValuesBox( new QComboBox( m_cubeFeaturesPanel ) )
     , m_cubeSizeSlider( new QSlider( Qt::Horizontal, m_cubeFeaturesPanel ) )
     , m_cubeBrightnessSlider( new QSlider( Qt::Horizontal, m_cubeFeaturesPanel ) )
+    , m_cubeAutoBrightnessToggle( new QCheckBox( "Auto", m_cubeFeaturesPanel ) )
     , m_universeSpacingSlider( new QSlider( Qt::Horizontal, this ) )
     , m_universeSpacingEdit( new QSpinBox( this ) )
     , m_infoLabel( new QLabel( this ) )
@@ -493,8 +494,14 @@ CantorPanel::CantorPanel( QWidget* const parent )
     cubeAppearanceRow->addWidget( new QLabel( "Brightness:", cubePage ) );
     m_cubeBrightnessSlider->setRange( 25, 300 );
     m_cubeBrightnessSlider->setToolTip(
-        "Point exposure, 25-300%; 100% is the original brightness." );
+        "Manual point exposure, 25-300%; 100% is the original brightness. "
+        "Ignored while Auto is enabled." );
     cubeAppearanceRow->addWidget( m_cubeBrightnessSlider, 1 );
+
+    m_cubeAutoBrightnessToggle->setToolTip(
+        "Automatically adapt 3D Byte Cloud exposure to the visible cloud. "
+        "Disable this to use the manual brightness slider." );
+    cubeAppearanceRow->addWidget( m_cubeAutoBrightnessToggle );
 
     QLabel* const cubeBrightnessPercent = new QLabel( cubePage );
     cubeBrightnessPercent->setMinimumWidth( 42 );
@@ -515,6 +522,7 @@ CantorPanel::CantorPanel( QWidget* const parent )
         m_cubeValuesBox->setCurrentIndex( 0 );
         m_cubeSizeSlider->setValue( 100 );
         m_cubeBrightnessSlider->setValue( 100 );
+        m_cubeAutoBrightnessToggle->setChecked( true );
     } );
 
     const QSettings cubeSettings( "CantorDust", "IDA" );
@@ -529,23 +537,29 @@ CantorPanel::CantorPanel( QWidget* const parent )
 
     m_cubeBrightnessSlider->setValue( std::clamp(
         cubeSettings.value( "cubeBrightness", 100 ).toInt(), 25, 300 ) );
+    m_cubeAutoBrightnessToggle->setChecked( cubeSettings.contains( "cubeAutoBrightness" )
+        ? cubeSettings.value( "cubeAutoBrightness" ).toBool() : true );
     cubeSizePercent->setText(
         QString::number( m_cubeSizeSlider->value() ) + "%" );
     cubeBrightnessPercent->setText(
         QString::number( m_cubeBrightnessSlider->value() ) + "%" );
+    m_cubeBrightnessSlider->setEnabled( !m_cubeAutoBrightnessToggle->isChecked() );
 
     const auto updateCubeRender = [this]() {
         const CubeRenderOptions_s opts{
             static_cast< CubeGeometry_e >( m_cubeGeometryBox->currentIndex() ),
             m_cubeSizeSlider->value() / 100.0f,
-            m_cubeBrightnessSlider->value() / 100.0f };
+            m_cubeBrightnessSlider->value() / 100.0f,
+            m_cubeAutoBrightnessToggle->isChecked() };
 
         m_cubePlot->SetRenderOptions( opts );
         m_overviewCube->SetRenderOptions( opts );
+        m_cubeBrightnessSlider->setEnabled( !m_cubeAutoBrightnessToggle->isChecked() );
         QSettings preferences( "CantorDust", "IDA" );
         preferences.setValue( "cubeGeometry", m_cubeGeometryBox->currentIndex() );
         preferences.setValue( "cubePointSize", m_cubeSizeSlider->value() );
         preferences.setValue( "cubeBrightness", m_cubeBrightnessSlider->value() );
+        preferences.setValue( "cubeAutoBrightness", m_cubeAutoBrightnessToggle->isChecked() );
     };
     QObject::connect( m_cubeGeometryBox, QOverload<int>::of( &QComboBox::currentIndexChanged ),
         this, [updateCubeRender]( int ) { updateCubeRender(); } );
@@ -555,6 +569,9 @@ CantorPanel::CantorPanel( QWidget* const parent )
 
     QObject::connect( m_cubeBrightnessSlider, &QSlider::valueChanged,
         this, [updateCubeRender]( int ) { updateCubeRender(); } );
+
+    QObject::connect( m_cubeAutoBrightnessToggle, &QCheckBox::toggled,
+        this, [updateCubeRender]( bool ) { updateCubeRender(); } );
 
     QObject::connect( m_cubeValuesBox, QOverload<int>::of( &QComboBox::currentIndexChanged ),
         this, [this]( int value ) {

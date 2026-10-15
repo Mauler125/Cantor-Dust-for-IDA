@@ -122,6 +122,7 @@ QJsonObject CantorPanel::CaptureInvestigation() const
     item.insert( "cubeValues", m_cubeValuesBox->currentIndex() );
     item.insert( "cubePointSize", m_cubeSizeSlider->value() );
     item.insert( "cubeBrightness", m_cubeBrightnessSlider->value() );
+    item.insert( "cubeAutoBrightness", m_cubeAutoBrightnessToggle->isChecked() );
     item.insert( "segment", m_segmentBox->currentIndex() );
     item.insert( "offset", QString::number( static_cast< qulonglong >( m_windowOffset ), 16 ) );
     item.insert( "span", QString::number( static_cast< qulonglong >( m_detailSpan ), 16 ) );
@@ -267,6 +268,7 @@ bool CantorPanel::RestoreInvestigation( const QJsonObject& item )
         const QSignalBlocker valuesBlock( m_cubeValuesBox );
         const QSignalBlocker sizeBlock( m_cubeSizeSlider );
         const QSignalBlocker brightnessBlock( m_cubeBrightnessSlider );
+        const QSignalBlocker autoBrightnessBlock( m_cubeAutoBrightnessToggle );
         m_cubeGeometryBox->setCurrentIndex( std::clamp(
             item.value( "cubeGeometry" ).toInt( m_cubeGeometryBox->currentIndex() ), 0, 3 ) );
 
@@ -279,13 +281,18 @@ bool CantorPanel::RestoreInvestigation( const QJsonObject& item )
         m_cubeBrightnessSlider->setValue( std::clamp(
             item.value( "cubeBrightness" ).toInt( m_cubeBrightnessSlider->value() ), 25, 300 ) );
 
+        if ( item.contains( "cubeAutoBrightness" ) )
+            m_cubeAutoBrightnessToggle->setChecked( item.value( "cubeAutoBrightness" ).toBool() );
+
         const CubeRenderOptions_s opts{
             static_cast< CubeGeometry_e >( m_cubeGeometryBox->currentIndex() ),
             m_cubeSizeSlider->value() / 100.0f,
-            m_cubeBrightnessSlider->value() / 100.0f };
+            m_cubeBrightnessSlider->value() / 100.0f,
+            m_cubeAutoBrightnessToggle->isChecked() };
 
         m_cubePlot->SetRenderOptions( opts );
         m_overviewCube->SetRenderOptions( opts );
+        m_cubeBrightnessSlider->setEnabled( !m_cubeAutoBrightnessToggle->isChecked() );
     }
     // A restored filter configuration becomes the active persisted preference.
     QSettings preferences( "CantorDust", "IDA" );
@@ -299,6 +306,7 @@ bool CantorPanel::RestoreInvestigation( const QJsonObject& item )
     preferences.setValue( "cubeValues", m_cubeValuesBox->currentIndex() );
     preferences.setValue( "cubePointSize", m_cubeSizeSlider->value() );
     preferences.setValue( "cubeBrightness", m_cubeBrightnessSlider->value() );
+    preferences.setValue( "cubeAutoBrightness", m_cubeAutoBrightnessToggle->isChecked() );
     preferences.setValue( "communityMode", m_universeClusterToggle->isChecked() );
     ClearUniverseRoutes();
     m_universeFocusAddress = focusText.isEmpty()

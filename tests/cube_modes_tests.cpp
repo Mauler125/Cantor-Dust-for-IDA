@@ -103,6 +103,23 @@ static void Tests_GeometryAndExposure()
 
     assert( lighter.argb != darker.argb );
     assert( lighter.sourceIndex == darker.sourceIndex );
+
+    opts = {};
+    opts.autoBrightness = true;
+    opts.brightness = 0.25f;
+
+    const Image_s autoDim = Cube_Render( cloud, camera,
+        240, 220, CDP_REFERENCE, opts );
+
+    opts.brightness = 3.0f;
+
+    const Image_s autoBright = Cube_Render( cloud, camera,
+        240, 220, CDP_REFERENCE, opts );
+
+    assert( autoDim.argb == autoBright.argb );
+    assert( autoDim.sourceIndex == autoBright.sourceIndex );
+    assert( autoDim.argb != original.argb );
+    assert( autoDim.sourceIndex == original.sourceIndex );
 }
 
 static void Tests_DataBoundaries()

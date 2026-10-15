@@ -28,6 +28,7 @@ struct CubeRenderOptions_s
     CubeGeometry_e geometry = CCG_CUBE;
     f32 pointSize = 1.0f;
     f32 brightness = 1.0f;
+    bool autoBrightness = false;
 };
 
 // The first byte is the navigable anchor. u8 uses the following three bytes;

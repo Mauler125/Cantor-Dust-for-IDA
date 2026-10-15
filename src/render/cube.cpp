@@ -317,6 +317,73 @@ static void Cube_DrawLine( Image_s& image,
     }
 }
 
+static f32 Cube_AutoExposure( const f32* const red,
+    const f32* const green, const f32* const blue, const usize pixelCount )
+{
+    constexpr usize bins = 512;
+    std::array< u32, bins > histogram{};
+    usize occupied = 0;
+    f32 maximum = 0.0f;
+
+    for ( usize i = 0; i < pixelCount; ++i )
+    {
+        const f32 luminance = ( red[ i ] + green[ i ] + blue[ i ] ) / 3.0f;
+
+        if ( luminance <= 0.0f )
+            continue;
+
+        maximum = std::max( maximum, luminance );
+        ++occupied;
+    }
+
+    if ( occupied == 0 || maximum <= 0.0f )
+        return 1.0f;
+
+    for ( usize i = 0; i < pixelCount; ++i )
+    {
+        const f32 luminance = ( red[ i ] + green[ i ] + blue[ i ] ) / 3.0f;
+
+        if ( luminance <= 0.0f )
+            continue;
+
+        const f32 normalized = std::clamp( luminance / maximum, 0.0f, 1.0f );
+        const usize index = std::min< usize >( bins - 1u,
+            static_cast< usize >( normalized * static_cast< f32 >( bins - 1u ) ) );
+        ++histogram[ index ];
+    }
+
+    const usize highTarget = std::max< usize >( 1u, occupied * 97u / 100u );
+    const usize middleTarget = std::max< usize >( 1u, occupied * 70u / 100u );
+    usize cumulative = 0;
+    f32 high = maximum;
+    f32 middle = maximum;
+    bool middleFound = false;
+
+    for ( usize index = 0; index < bins; ++index )
+    {
+        cumulative += histogram[ index ];
+
+        if ( !middleFound && cumulative >= middleTarget )
+        {
+            middle = maximum * ( static_cast< f32 >( index ) + 0.5f ) /
+                static_cast< f32 >( bins );
+            middleFound = true;
+        }
+
+        if ( cumulative >= highTarget )
+        {
+            high = maximum * ( static_cast< f32 >( index ) + 0.5f ) /
+                static_cast< f32 >( bins );
+            break;
+        }
+    }
+
+    const f32 highExposure = 0.82f / std::max( high, 0.0001f );
+    const f32 middleExposure = 0.22f / std::max( middle, 0.0001f );
+    return std::clamp( std::min( highExposure, middleExposure * 2.35f ),
+        0.35f, 6.0f );
+}
+
 static void Cube_MapGeometry( const CubePoint_s& point,
     const CubeGeometry_e mode, f32& x, f32& y, f32& z )
 {
@@ -387,7 +454,8 @@ void Cube_RenderInto( Image_s& image,
     const f32 centerY = static_cast< f32 >( height ) * 0.5f;
     const f32 zoomExposure = Math_CubeZoomExposure( camera.zoom );
     const f32 pointSize = std::clamp( options.pointSize, 0.5f, 2.0f );
-    const f32 brightness = std::clamp( options.brightness, 0.25f, 3.0f );
+    const f32 brightness = options.autoBrightness ? 1.0f :
+        std::clamp( options.brightness, 0.25f, 3.0f );
     const int radius = std::clamp( static_cast< int >( ceil( 2.0f * pointSize ) ), 1, 4 );
 
     static const f32 kernel[ 5 ][ 5 ] = {
@@ -473,6 +541,8 @@ void Cube_RenderInto( Image_s& image,
 
     const MathColor_s background = Math_ColorUnpack( colors.background3d );
     const MathColor_s whiteHot = Math_ColorUnpack( colors.full );
+    const f32 exposure = options.autoBrightness
+        ? Cube_AutoExposure( red, green, blue, pixelCount ) : 1.0f;
 
     for ( usize i = 0; i < pixelCount; ++i )
     {
@@ -481,7 +551,7 @@ void Cube_RenderInto( Image_s& image,
             continue;
         }
 
-        const MathColor_s light = { red[ i ], green[ i ], blue[ i ] };
+        const MathColor_s light = { red[ i ] * exposure, green[ i ] * exposure, blue[ i ] * exposure };
         image.argb[ i ] = Math_ColorPack(
             Math_CubeComposite( light, background, whiteHot ) );
     }

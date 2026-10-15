@@ -189,6 +189,7 @@ private:
     QComboBox* const m_cubeValuesBox;
     QSlider* const m_cubeSizeSlider;
     QSlider* const m_cubeBrightnessSlider;
+    QCheckBox* const m_cubeAutoBrightnessToggle;
     QSlider* const m_universeSpacingSlider;
     QSpinBox* const m_universeSpacingEdit;
     QLabel* const m_infoLabel;
