@@ -412,7 +412,7 @@ static void Tests_RelativeHeatAndSelection()
         { 0x1000u, "callee", 5u, 0u, 0u, -0.3f, 0.0f, 0.0f },
         { 0x2000u, "caller", 0u, 5u, 0u, 0.3f, 0.0f, 0.0f }
     };
-    graph.links.push_back({ 1u, 0u, 5u, {} });
+    graph.links.push_back({ 1u, 0u, 5u, 0u, {} });
     Image_s without;
     Image_s selected;
     CubeCamera_s camera;
@@ -1719,7 +1719,7 @@ static void Tests_ClippedVisibleConnections()
         { 0x1000u, "behind", 0u, 1u, 0u, -0.45f, -0.2f, 8.0f },
         { 0x2000u, "visible", 1u, 0u, 0u, 0.65f, 0.5f, 0.0f }
     };
-    graph.links.push_back({ 0u, 1u, 3u, {} });
+    graph.links.push_back({ 0u, 1u, 3u, 0u, {} });
     CubeCamera_s camera;
     camera.yaw = 0.0f;
     camera.pitch = 0.0f;

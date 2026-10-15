@@ -99,8 +99,8 @@ struct Projected_s
 {
     f64 x = 0;
     f64 y = 0;
-    f32 depth = 0;
     f64 radius = 0;
+    f32 depth = 0;
     bool valid = false;
 };
 
@@ -223,7 +223,7 @@ std::string Universe_ExportSvg( const UniverseGraph_s& graph,
             std::clamp( sqrt( std::max( camera.zoom, 0.0f ) ), 0.70f, 1.65f ) *
             depthScale;
 
-        points[ i ] = { x, y, projection.depth, radius, true };
+        points[ i ] = { x, y, radius, projection.depth, true };
     }
 
     std::ostringstream out;

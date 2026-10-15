@@ -283,7 +283,7 @@ static void TestFocusedLinkFade()
         { 0x2000, "callee", 0, 0, 12, 0.8f, 0.0f, 0.0f }
     };
     graph.nodes[ 1 ].focusDirection = 2;
-    graph.links.push_back({ 0, 1, 12, { 0x1010 } });
+    graph.links.push_back({ 0, 1, 12, 0, { 0x1010 } });
     CubeCamera_s camera;
     camera.yaw = 0;
     camera.pitch = 0;

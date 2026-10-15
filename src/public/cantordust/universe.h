@@ -151,11 +151,12 @@ struct UniverseLink_s
     u32 caller = 0;
     u32 callee = 0;
     u32 count = 0;
+    // Use the gap before the aligned vectors rather than trailing padding.
+    u8 pathMask = 0;
     std::vector< u64 > callSites;
     std::vector< u64 > targetAddresses;
     u32 fieldCount = 0;
     u32 renderWeight = 0;
-    u8 pathMask = 0;
 };
 
 struct UniverseGraph_s

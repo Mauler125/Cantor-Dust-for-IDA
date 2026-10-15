@@ -1030,7 +1030,7 @@ UniverseGraph_s Universe_FilterGraph(
 
         filtered.links.push_back({
             remap[ link.caller ], remap[ link.callee ],
-            link.count, link.callSites });
+            link.count, 0u, link.callSites });
     }
 
     if ( filtered.nodes.empty() )
@@ -1322,7 +1322,7 @@ static UniverseGraph_s Universe_FocusCallersImpl(
         focus.nodes.push_back( std::move( node ) );
         focus.links.push_back({
             static_cast< u32 >( i + 1u ), 0u,
-            link.count, link.callSites });
+            link.count, 0u, link.callSites });
     }
 
     Universe_LayoutFocusedCallers( focus );
@@ -1494,7 +1494,7 @@ static UniverseGraph_s Universe_FocusCallersFromDataImpl(
         node.focusCalls = source.count;
         focus.nodes.push_back( std::move( node ) );
         focus.links.push_back({ static_cast< u32 >( i + 1u ),
-            0u, source.count, std::move( source.sites ) });
+            0u, source.count, 0u, std::move( source.sites ) });
     }
 
     Universe_LayoutFocusedCallers( focus );
