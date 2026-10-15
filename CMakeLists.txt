@@ -36,6 +36,79 @@ option(CANTORDUST_ENABLE_SANITIZERS "Use ASan and UBSan for portable tests" OFF)
 option(CANTORDUST_CHECK_HEADERS "Compile portable headers independently" OFF)
 option(CANTORDUST_USE_PCH "Use target-specific precompiled headers for faster builds" ON)
 
+option(CANTORDUST_MAX_RELEASE_OPTIMIZATIONS
+    "Use LTO and platform-specific whole-program optimizations for Release builds" ON)
+
+# GCC/Clang already use -O3 in CMake's Release profile; MSVC uses /O2.
+# Cross-translation-unit optimization was previously missing. Apply IPO/LTO
+# to every Cantor Dust target (core, native IDA plugin, tests and tools) when
+# it is built as Release. Keep Debug/sanitizer profiles fully diagnostic.
+# Do not enable -march=native (binary portability) or fast-math (NaN/Inf and
+# floating-point behavior matter to the byte-cloud decoders).
+if(CANTORDUST_MAX_RELEASE_OPTIMIZATIONS AND NOT CANTORDUST_ENABLE_SANITIZERS)
+    if(CMAKE_CONFIGURATION_TYPES OR CMAKE_BUILD_TYPE STREQUAL "Release")
+        include(CheckIPOSupported)
+        check_ipo_supported(RESULT _cantordust_ipo_supported
+            OUTPUT _cantordust_ipo_error LANGUAGES CXX)
+
+        # Some Linux Clang distributions ship lld but no LLVMgold.so. In
+        # that case, GCC's default system linker cannot consume LLVM bitcode.
+        # Retry IPO with lld; the check module picks up CXX_FLAGS for its
+        # nested test project, while add_link_options handles real targets.
+        if(NOT _cantordust_ipo_supported AND
+           CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND UNIX AND NOT APPLE)
+            find_program(_cantordust_lld NAMES ld.lld)
+            if(_cantordust_lld)
+                set(_cantordust_saved_cxx_flags "${CMAKE_CXX_FLAGS}")
+                string(APPEND CMAKE_CXX_FLAGS " -fuse-ld=lld")
+                check_ipo_supported(RESULT _cantordust_lld_ipo_supported
+                    OUTPUT _cantordust_lld_ipo_error LANGUAGES CXX)
+                set(CMAKE_CXX_FLAGS "${_cantordust_saved_cxx_flags}")
+                if(_cantordust_lld_ipo_supported)
+                    set(_cantordust_ipo_supported TRUE)
+                    add_link_options("$<$<CONFIG:Release>:-fuse-ld=lld>")
+                    message(STATUS "Cantor Dust Release: using LLVM lld for LTO")
+                else()
+                    set(_cantordust_ipo_error "${_cantordust_lld_ipo_error}")
+                endif()
+            endif()
+        endif()
+        if(NOT _cantordust_ipo_supported)
+            message(FATAL_ERROR
+                "Release LTO/IPO is unsupported by this toolchain:\n"
+                "${_cantordust_ipo_error}\n"
+                "Use -DCANTORDUST_MAX_RELEASE_OPTIMIZATIONS=OFF only if "
+                "your SDK/toolchain does not support LTO.")
+        endif()
+        set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
+        message(STATUS "Cantor Dust Release: whole-program IPO/LTO enabled")
+    endif()
+
+    if(MSVC)
+        # /O2 is part of MSVC's Release default. Add aggressive inlining,
+        # function/global sections and linker-level unused/identical COMDAT
+        # elimination. CMake's IPO property injects /GL and /LTCG.
+        add_compile_options(
+            "$<$<CONFIG:Release>:/Ob3>"
+            "$<$<CONFIG:Release>:/Gy>"
+            "$<$<CONFIG:Release>:/Gw>")
+        add_link_options(
+            "$<$<CONFIG:Release>:/OPT:REF>"
+            "$<$<CONFIG:Release>:/OPT:ICF>"
+            "$<$<CONFIG:Release>:/INCREMENTAL:NO>")
+    elseif(APPLE)
+        add_compile_options(
+            "$<$<CONFIG:Release>:-ffunction-sections>"
+            "$<$<CONFIG:Release>:-fdata-sections>")
+        add_link_options("$<$<CONFIG:Release>:LINKER:-dead_strip>")
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        add_compile_options(
+            "$<$<CONFIG:Release>:-ffunction-sections>"
+            "$<$<CONFIG:Release>:-fdata-sections>")
+        add_link_options("$<$<CONFIG:Release>:LINKER:--gc-sections>")
+    endif()
+endif()
+
 if(CANTORDUST_ENABLE_SANITIZERS)
     if(MSVC OR NOT CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         message(FATAL_ERROR "ASan/UBSan option requires GCC or Clang outside MSVC")
