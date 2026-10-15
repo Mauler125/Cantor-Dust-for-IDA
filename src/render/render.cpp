@@ -115,9 +115,11 @@ static void Render_Digraph(
     const std::vector< ByteCell_s >& data,
     const Palette_s& palette )
 {
-    std::array< u32, CANTORDUST_WINDOW_SIZE > counts{};
-    std::array< usize, CANTORDUST_WINDOW_SIZE > first{};
-    first.fill( CANTORDUST_NO_SOURCE );
+    // Two 65,536-element arrays exceed Windows' default 1 MiB stack
+    // when combined with the caller's frame. Keep the histogram on the heap.
+    std::vector< u32 > counts( CANTORDUST_WINDOW_SIZE, 0u );
+    std::vector< usize > first(
+        CANTORDUST_WINDOW_SIZE, CANTORDUST_NO_SOURCE );
 
     const ByteCell_s* const cells = data.data();
 
