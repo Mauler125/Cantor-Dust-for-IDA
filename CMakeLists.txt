@@ -60,6 +60,7 @@ set(CANTORDUST_ENGINE_SOURCES
     src/math/hilbert.cpp
     src/math/pixel.cpp
     src/math/ranges.cpp
+    src/math/raster_fit.cpp
     src/math/window.cpp
     src/math/zoom.cpp
     src/math/universe.cpp
@@ -153,6 +154,12 @@ if(BUILD_TESTING)
     add_executable(cantordust_palette_roles_tests tests/palette_roles_tests.cpp)
     target_link_libraries(cantordust_palette_roles_tests PRIVATE cantordust_core)
     add_test(NAME palette_roles COMMAND cantordust_palette_roles_tests)
+
+    add_executable(cantordust_raster_fit_tests tests/raster_fit_tests.cpp)
+    target_include_directories(cantordust_raster_fit_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(cantordust_raster_fit_tests PRIVATE cantordust_core)
+    add_test(NAME raster_fit COMMAND cantordust_raster_fit_tests)
 
     add_executable(cantordust_tests tests/core_tests.cpp)
     target_include_directories(cantordust_tests

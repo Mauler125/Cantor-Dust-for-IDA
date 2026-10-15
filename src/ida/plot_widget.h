@@ -6,8 +6,10 @@
 #include "cantordust/types.h"
 #include "cantordust/palette.h"
 #include "ida/navigation_gate.h"
+#include "math/raster_fit.h"
 
 #include <QElapsedTimer>
+#include <QTimer>
 #include <QWheelEvent>
 #include <QtWidgets>
 
@@ -36,6 +38,7 @@ public:
 
 protected:
     void paintEvent( QPaintEvent* event ) override;
+    void resizeEvent( QResizeEvent* event ) override;
     void mousePressEvent( QMouseEvent* event ) override;
     void mouseMoveEvent( QMouseEvent* event ) override;
     void mouseReleaseEvent( QMouseEvent* event ) override;
@@ -43,6 +46,9 @@ protected:
     void wheelEvent( QWheelEvent* event ) override;
 
 private:
+    const Image_s& DisplayImage() const;
+    void RebuildDisplayRaster();
+    void RebuildDisplayHighlights();
     QRect TargetRect() const;
     QRect MapImageRect( const QRect& imageRect, const QRect& target ) const;
     usize SourceAt( const QPoint& position, QPoint* pixel ) const;
@@ -52,7 +58,9 @@ private:
 
     Palette_e m_palette = CDP_REFERENCE;
     Image_s m_image;
+    FittedRaster_s m_fittedRaster;
     std::vector< QRect > m_highlights;
+    std::vector< QRect > m_displayHighlights;
     View_e m_viewMode = CDV_HILBERT;
     std::function< void( usize, usize,
         usize, int ) > m_onWheel;
@@ -64,6 +72,7 @@ private:
     std::function< void( usize ) > m_onHover;
     NavigationGate m_navigationGate;
     QElapsedTimer m_navigationClock;
+    QTimer m_resizeTimer;
     bool m_dragging = false;
 };
 

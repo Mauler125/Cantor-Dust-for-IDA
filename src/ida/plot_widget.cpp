@@ -19,6 +19,14 @@ PlotWidget::PlotWidget( QWidget* const parent ) : QWidget( parent )
     setSizePolicy( QSizePolicy::Expanding, QSizePolicy::Expanding );
     setMouseTracking( true );
     setCursor( Qt::CrossCursor );
+
+    // Do not regenerate a large byte raster for every intermediate dock
+    // dimension during a splitter drag. The existing image fills the
+    // viewport immediately; the byte layout reflows after resizing settles.
+    m_resizeTimer.setSingleShot( true );
+    m_resizeTimer.setInterval( 60 );
+    QObject::connect( &m_resizeTimer, &QTimer::timeout,
+        this, [this]() { RebuildDisplayRaster(); update(); } );
 }
 
 void PlotWidget::SetImage( Image_s image )
@@ -28,6 +36,8 @@ void PlotWidget::SetImage( Image_s image )
     setCursor( Qt::CrossCursor );
     m_navigationGate.Reset();
     ClearHover();
+    m_resizeTimer.stop();
+    RebuildDisplayRaster();
     update();
 }
 
@@ -42,7 +52,14 @@ void PlotWidget::SetPalette( const Palette_e palette )
 
 void PlotWidget::SetViewMode( const View_e mode )
 {
+    if ( m_viewMode == mode )
+        return;
+
     m_viewMode = mode;
+    ClearHover();
+    m_resizeTimer.stop();
+    RebuildDisplayRaster();
+    update();
 }
 
 void PlotWidget::SetOnWheel(
@@ -55,6 +72,7 @@ void PlotWidget::SetOnWheel(
 void PlotWidget::SetHighlights( std::vector< QRect > highlights )
 {
     m_highlights = std::move( highlights );
+    RebuildDisplayHighlights();
     update();
 }
 
@@ -70,11 +88,99 @@ void PlotWidget::SetOnHover(
     m_onHover = std::move( callback );
 }
 
+const Image_s& PlotWidget::DisplayImage() const
+{
+    return !m_fittedRaster.image.argb.empty()
+        ? m_fittedRaster.image : m_image;
+}
+
+void PlotWidget::RebuildDisplayRaster()
+{
+    m_fittedRaster = {};
+
+    if ( ( m_viewMode == CDV_LINEAR || m_viewMode == CDV_HILBERT ) &&
+         !m_image.argb.empty() &&
+         contentsRect().width() > 0 && contentsRect().height() > 0 &&
+         contentsRect().width() != contentsRect().height() )
+    {
+        m_fittedRaster = Math_FitByteRaster( m_image, m_viewMode,
+            contentsRect().width(), contentsRect().height() );
+    }
+
+    RebuildDisplayHighlights();
+}
+
+void PlotWidget::RebuildDisplayHighlights()
+{
+    m_displayHighlights = m_highlights;
+
+    const Image_s& display = DisplayImage();
+    if ( m_highlights.empty() || m_fittedRaster.ordinal.empty() ||
+         ( display.width == m_image.width &&
+           display.height == m_image.height ) )
+    {
+        return;
+    }
+
+    // Overview selections arrive in source-square coordinates. Rebuild the
+    // selected runs in the fitted geometry so the contour and navigation
+    // remain accurate after either dock is resized.
+    std::vector< u8 > selected( m_image.width * m_image.height, 0 );
+    const QRect sourceBounds( 0, 0,
+        static_cast< int >( m_image.width ),
+        static_cast< int >( m_image.height ) );
+
+    for ( const QRect& rect : m_highlights )
+    {
+        const QRect clipped = rect.intersected( sourceBounds );
+        for ( int y = clipped.top(); y <= clipped.bottom(); ++y )
+            for ( int x = clipped.left(); x <= clipped.right(); ++x )
+                selected[ static_cast< usize >( y ) * m_image.width +
+                    static_cast< usize >( x ) ] = 1;
+    }
+
+    m_displayHighlights.clear();
+    for ( usize y = 0; y < display.height; ++y )
+    {
+        usize x = 0;
+        while ( x < display.width )
+        {
+            const auto isSelected = [&]( const usize column ) {
+                const usize ordinal = m_fittedRaster.ordinal[
+                    y * display.width + column ];
+                const usize sourcePixel = m_viewMode == CDV_HILBERT
+                    ? [&]() {
+                        const Point_s point = Math_HilbertPosition(
+                            ordinal, m_image.width );
+                        return point.y * m_image.width + point.x;
+                    }()
+                    : ordinal;
+                return selected[ sourcePixel ] != 0;
+            };
+
+            if ( !isSelected( x ) )
+            {
+                ++x;
+                continue;
+            }
+
+            const usize start = x;
+            while ( x < display.width && isSelected( x ) )
+                ++x;
+
+            m_displayHighlights.emplace_back(
+                static_cast< int >( start ), static_cast< int >( y ),
+                static_cast< int >( x - start ), 1 );
+        }
+    }
+}
+
 QRect PlotWidget::TargetRect() const
 {
     const QRect bounds = contentsRect();
 
-    if ( bounds.isEmpty() || m_image.width == 0 || m_image.height == 0 )
+    if ( bounds.isEmpty() || DisplayImage().width == 0 ||
+         DisplayImage().height == 0 )
     {
         return {};
     }
@@ -86,23 +192,24 @@ QRect PlotWidget::MapImageRect(
     const QRect& imageRect,
     const QRect& target ) const
 {
+    const Image_s& image = DisplayImage();
     const i64 left = target.x() +
         static_cast< i64 >( imageRect.x() ) * target.width() /
-        static_cast< i64 >( m_image.width );
+        static_cast< i64 >( image.width );
 
     const i64 top = target.y() +
         static_cast< i64 >( imageRect.y() ) * target.height() /
-        static_cast< i64 >( m_image.height );
+        static_cast< i64 >( image.height );
 
     const i64 right = target.x() +
         static_cast< i64 >( imageRect.x() + imageRect.width() ) *
         target.width() /
-        static_cast< i64 >( m_image.width );
+        static_cast< i64 >( image.width );
 
     const i64 bottom = target.y() +
         static_cast< i64 >( imageRect.y() + imageRect.height() ) *
         target.height() /
-        static_cast< i64 >( m_image.height );
+        static_cast< i64 >( image.height );
 
     return QRect(
         static_cast< int >( left ),
@@ -116,12 +223,13 @@ usize PlotWidget::SourceAt(
     QPoint* const pixel ) const
 {
     const QRect target = TargetRect();
+    const Image_s& image = DisplayImage();
     Point_s mapped;
 
     if ( !Math_MapPointToImage(
              position.x(), position.y(),
              target.x(), target.y(), target.width(), target.height(),
-             m_image.width, m_image.height, mapped ) )
+             image.width, image.height, mapped ) )
     {
         return CANTORDUST_NO_SOURCE;
     }
@@ -133,7 +241,7 @@ usize PlotWidget::SourceAt(
             static_cast< int >( mapped.y ) );
     }
 
-    return m_image.SourceAt( mapped.x, mapped.y );
+    return image.SourceAt( mapped.x, mapped.y );
 }
 
 void PlotWidget::ClearHover()
@@ -209,17 +317,18 @@ void PlotWidget::paintEvent( QPaintEvent* )
         QColor::fromRgba( Palette_Get( m_palette ).background ) );
 
     const QRect target = TargetRect();
+    const Image_s& image = DisplayImage();
 
-    if ( target.isEmpty() || m_image.argb.empty() )
+    if ( target.isEmpty() || image.argb.empty() )
     {
         return;
     }
 
     const QImage bitmap(
-        reinterpret_cast< const uchar* >( m_image.argb.data() ),
-        static_cast< int >( m_image.width ),
-        static_cast< int >( m_image.height ),
-        static_cast< int >( m_image.width * sizeof( u32 ) ),
+        reinterpret_cast< const uchar* >( image.argb.data() ),
+        static_cast< int >( image.width ),
+        static_cast< int >( image.height ),
+        static_cast< int >( image.width * sizeof( u32 ) ),
         QImage::Format_ARGB32 );
 
     painter.setRenderHint( QPainter::SmoothPixmapTransform, false );
@@ -231,7 +340,7 @@ void PlotWidget::paintEvent( QPaintEvent* )
     // then fill once and draw only the actual outside contour.
     QRegion selection;
 
-    for ( const QRect& imageRect : m_highlights )
+    for ( const QRect& imageRect : m_displayHighlights )
     {
         const QRect overlay = MapImageRect( imageRect, target ).intersected( target );
 
@@ -269,18 +378,26 @@ void PlotWidget::paintEvent( QPaintEvent* )
         const int x = target.x() + static_cast< int >(
             ( static_cast< i64 >( m_hoverPixel.x() ) * 2 + 1 ) *
             target.width() /
-            static_cast< i64 >( m_image.width * 2 ) );
+            static_cast< i64 >( image.width * 2 ) );
 
         const int y = target.y() + static_cast< int >(
             ( static_cast< i64 >( m_hoverPixel.y() ) * 2 + 1 ) *
             target.height() /
-            static_cast< i64 >( m_image.height * 2 ) );
+            static_cast< i64 >( image.height * 2 ) );
 
         painter.setPen( QPen( QColor::fromRgba(
             Palette_Get( m_palette ).selection ), 1 ) );
         painter.setBrush( Qt::NoBrush );
         painter.drawEllipse( QPoint( x, y ), 4, 4 );
     }
+}
+
+void PlotWidget::resizeEvent( QResizeEvent* const event )
+{
+    QWidget::resizeEvent( event );
+    ClearHover();
+    m_resizeTimer.start();
+    update();
 }
 
 void PlotWidget::mousePressEvent( QMouseEvent* const event )
@@ -341,7 +458,7 @@ void PlotWidget::leaveEvent( QEvent* const event )
 
 void PlotWidget::wheelEvent( QWheelEvent* const event )
 {
-    if ( !m_onWheel || m_image.argb.empty() ||
+    if ( !m_onWheel || DisplayImage().argb.empty() ||
          !TargetRect().contains( event->position().toPoint() ) )
     {
         QWidget::wheelEvent( event );
@@ -362,19 +479,26 @@ void PlotWidget::wheelEvent( QWheelEvent* const event )
 
         if ( pixel.x() >= 0 )
         {
+            const Image_s& image = DisplayImage();
             usize ordinal = 0;
 
-            if ( m_viewMode == CDV_HILBERT )
+            if ( !m_fittedRaster.ordinal.empty() )
+            {
+                ordinal = m_fittedRaster.ordinal[
+                    static_cast< usize >( pixel.y() ) * image.width +
+                    static_cast< usize >( pixel.x() ) ];
+            }
+            else if ( m_viewMode == CDV_HILBERT )
             {
                 ordinal = Math_HilbertIndex(
                     { static_cast< usize >( pixel.x() ),
                       static_cast< usize >( pixel.y() ) },
-                    m_image.width );
+                    image.width );
             }
             else
             {
                 ordinal = static_cast< usize >( pixel.y() ) *
-                    m_image.width + static_cast< usize >( pixel.x() );
+                    image.width + static_cast< usize >( pixel.x() );
             }
 
             m_onWheel( source, ordinal, m_image.width * m_image.height,
