@@ -222,5 +222,5 @@ plugin_t PLUGIN = {
     "Cantor Dust for IDA: interactive binary visualization",
     "Explore byte rasters, byte-pair densities, histograms, and Hilbert maps.",
     "Cantor Dust",
-    "Alt-C",
+    "Alt-Shift-C",
 };

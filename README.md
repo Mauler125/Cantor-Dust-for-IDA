@@ -8,7 +8,7 @@ Explore binary data and function relationships in a dockable IDA panel. Visualiz
 
 1. Download the plugin for your platform and IDA version from [Releases](https://github.com/Mauler125/Cantor-Dust-for-IDA/releases).
 2. Copy the plugin (`.dll` on Windows) into IDA's `plugins/` directory.
-3. Restart IDA and open **Edit > Plugins > Cantor Dust** (`Alt+C`).
+3. Restart IDA and open **Edit > Plugins > Cantor Dust** (`Alt+Shift+C`).
 4. :
 ![Jarvis](examples/jarvis.jpg)
 
