@@ -78,10 +78,12 @@ jobs:
         run: brew install ninja
       - name: Restore namespaced Qt 6.8.2
         id: qt-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ${{ github.workspace }}/.ci/qt-prefix
-          key: cantordust-qtbase-6.8.2-QT-${{ matrix.name }}-v1
+          # ARM64's previous cache may contain x64 Qt libraries. Bump only
+          # that platform's cache revision to force a correct rebuild.
+          key: cantordust-qtbase-6.8.2-QT-${{ matrix.name }}-${{ matrix.os == 'windows' && matrix.arch == 'aarch64' && 'v2' || 'v1' }}
       - name: Fetch SDKs and build namespaced Qt if missing
         shell: bash
         env:
@@ -91,10 +93,22 @@ jobs:
           read -ra versions <<< "$TARGET_VERSIONS"
           extra=()
           if [[ "$TARGET_ARCH" == universal ]]; then extra+=(--macos-universal); fi
+          if [[ "$TARGET_ARCH" == aarch64 && "$RUNNER_OS" == Windows ]]; then
+            extra+=(--windows-arm64)
+          fi
           python scripts/ci-native-deps.py \
             --sdk-root .ci/sdks --qt-prefix .ci/qt-prefix \
             --qt-work .ci/qt-work --versions "${versions[@]}" \
             --parallel 4 "${extra[@]}"
+      # Save Qt immediately: the later IDA plugin build can fail while we're
+      # iterating on SDK compatibility. The combined actions/cache action
+      # only saves after the *whole job* succeeds, wasting expensive Qt builds.
+      - name: Save compiled Qt before plugin compilation
+        if: steps.qt-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ github.workspace }}/.ci/qt-prefix
+          key: ${{ steps.qt-cache.outputs.cache-primary-key }}
       - name: Build and package native plugins
         shell: bash
         env:
