@@ -81,9 +81,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ${{ github.workspace }}/.ci/qt-prefix
-          # ARM64's previous cache may contain x64 Qt libraries. Bump only
-          # that platform's cache revision to force a correct rebuild.
-          key: cantordust-qtbase-6.8.2-QT-${{ matrix.name }}-${{ matrix.os == 'windows' && matrix.arch == 'aarch64' && 'v2' || 'v1' }}
+          # Windows ARM64 v3 includes Qt host tools inside the target prefix.
+          # The older v2 cache lacked QT_HOST_PATH, so do not restore it.
+          key: cantordust-qtbase-6.8.2-QT-${{ matrix.name }}-${{ matrix.os == 'windows' && matrix.arch == 'aarch64' && 'v3' || 'v1' }}
       - name: Fetch SDKs and build namespaced Qt if missing
         shell: bash
         env:
@@ -98,6 +98,7 @@ jobs:
           fi
           python scripts/ci-native-deps.py \
             --sdk-root .ci/sdks --qt-prefix .ci/qt-prefix \
+            --qt-host-prefix .ci/qt-prefix/host-qt \
             --qt-work .ci/qt-work --versions "${versions[@]}" \
             --parallel 4 "${extra[@]}"
       # Save Qt immediately: the later IDA plugin build can fail while we're
@@ -123,7 +124,8 @@ jobs:
             extra+=(--windows-arm64)
           fi
           python scripts/build-all.py --sdk-root .ci/sdks \
-            --qt-prefix .ci/qt-prefix --versions "${versions[@]}" \
+            --qt-prefix .ci/qt-prefix --qt-host-prefix .ci/qt-prefix/host-qt \
+            --versions "${versions[@]}" \
             --build-root .ci/native-build --output dist --parallel 4 \
             "${extra[@]}"
       - name: Upload installable native ZIPs

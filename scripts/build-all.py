@@ -136,6 +136,8 @@ def main(argv=None):
     parser.add_argument("--sdk", action="append", default=[], metavar="VERSION=PATH")
     parser.add_argument("--versions", nargs="+", default=list(SUPPORTED), choices=SUPPORTED)
     parser.add_argument("--qt-prefix", type=Path, help="IDA-compatible namespaced Qt6 prefix")
+    parser.add_argument("--qt-host-prefix", type=Path,
+                        help="Qt 6.8.2 host tools for Windows ARM64 cross-builds")
     parser.add_argument("--build-root", type=Path, default=ROOT / "build-ida-matrix")
     parser.add_argument("--output", type=Path, default=ROOT / "dist")
     parser.add_argument("--generator", default="Ninja")
@@ -192,6 +194,14 @@ def main(argv=None):
                     raise ValueError(f"ARM64 SDK toolchain missing: {toolchain}")
                 cmake_args.extend((f"-DCMAKE_TOOLCHAIN_FILE={toolchain}",
                                    "-DCANTORDUST_EXPECTED_TARGET_ARCH=ARM64"))
+                # A cross-built Qt requires matching host-side moc/rcc tools;
+                # pass the same host prefix used to build the ARM64 Qt SDK.
+                host_qt = (args.qt_host_prefix.expanduser().resolve()
+                           if args.qt_host_prefix else qt / "host-qt")
+                if not args.dry_run and not (
+                        host_qt / "lib/cmake/Qt6HostInfo/Qt6HostInfoConfig.cmake").is_file():
+                    raise ValueError(f"Windows ARM64 Qt host tools missing: {host_qt}")
+                cmake_args.append(f"-DQT_HOST_PATH={host_qt}")
             cmake_args.extend(args.cmake_arg)
             print(f"\nBuilding IDA {version} for {host} "
                   f"({'native SDK CMake' if modern else 'legacy SDK adapter'})")

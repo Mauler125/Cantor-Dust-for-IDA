@@ -59,10 +59,45 @@ def verify_arm64_qt(prefix):
     print("Verified Qt Core/Gui/Widgets: Windows ARM64", flush=True)
 
 
+def install_windows_arm64_qt_host(qt_src, work, host_prefix, parallel):
+    """Provide Qt 6.8.2 host-side moc/rcc for the ARM64 cross-Qt build.
+
+    Qt 6 treats the SDK ARM64 MSVC toolchain as a cross compiler (even on a
+    Windows ARM runner). A matching host Qt installation is mandatory. Build
+    it without the ARM64 toolchain so its executables run on the runner.
+    Its installation is cached alongside the target ARM64 Qt installation.
+    """
+    host_config = host_prefix / "lib/cmake/Qt6/Qt6Config.cmake"
+    host_info = host_prefix / "lib/cmake/Qt6HostInfo/Qt6HostInfoConfig.cmake"
+    if host_config.is_file() and host_info.is_file():
+        print(f"Using cached Qt host tools: {host_prefix}", flush=True)
+        return
+    host_build = work / "qtbase-host-build"
+    host_cmd = ["cmake", "-S", qt_src, "-B", host_build, "-G", "Ninja",
+                "-DCMAKE_BUILD_TYPE=Release",
+                f"-DCMAKE_INSTALL_PREFIX={host_prefix}",
+                "-DQT_NAMESPACE=QT", "-DBUILD_SHARED_LIBS=ON",
+                "-DQT_BUILD_TESTS=OFF", "-DQT_BUILD_EXAMPLES=OFF",
+                "-DQT_BUILD_BENCHMARKS=OFF"]
+    # No -DCMAKE_TOOLCHAIN_FILE here: this Qt supplies host-executable
+    # tools, not target ARM64 libraries. The SDK ARM64 toolchain is used
+    # only for the second Qt configuration.
+    run(*host_cmd)
+    run("cmake", "--build", host_build, "--parallel", str(parallel))
+    run("cmake", "--install", host_build)
+    if not host_config.is_file() or not host_info.is_file():
+        raise RuntimeError(f"Qt host installation is incomplete: {host_prefix}")
+    print(f"Installed Qt 6.8.2 host tools: {host_prefix}", flush=True)
+
+
 def install_qt(prefix, work, parallel, universal, windows_arm64=False,
-               sdk_root=None):
+               sdk_root=None, host_prefix=None):
     cmake_config = prefix / "lib/cmake/Qt6/Qt6Config.cmake"
-    if cmake_config.is_file():
+    if windows_arm64 and host_prefix is None:
+        raise RuntimeError("--qt-host-prefix is required for Windows ARM64")
+    host_config = (host_prefix / "lib/cmake/Qt6HostInfo/Qt6HostInfoConfig.cmake"
+                   if windows_arm64 else None)
+    if cmake_config.is_file() and (not windows_arm64 or host_config.is_file()):
         if windows_arm64:
             verify_arm64_qt(prefix)
         print(f"Using cached Qt: {prefix}")
@@ -72,6 +107,17 @@ def install_qt(prefix, work, parallel, universal, windows_arm64=False,
     if not qt_src.exists():
         run("git", "clone", "--depth", "1", "--branch", QT_TAG,
             "https://github.com/qt/qtbase.git", qt_src)
+    if windows_arm64:
+        # This must happen before configuring the SDK ARM64 target Qt.
+        # Qt's cross-compiler configuration requires QT_HOST_PATH even
+        # when the ARM64 runner could execute ARM64 programs natively.
+        install_windows_arm64_qt_host(qt_src, work, host_prefix, parallel)
+        if cmake_config.is_file():
+            # Partial cache restore: the existing target is safe to reuse,
+            # provided we now also have the host-side tools for the plugin.
+            verify_arm64_qt(prefix)
+            print(f"Using cached Qt: {prefix}")
+            return
     qt_build = work / "qtbase-build"
     cmd = ["cmake", "-S", qt_src, "-B", qt_build, "-G", "Ninja",
            "-DCMAKE_BUILD_TYPE=Release", f"-DCMAKE_INSTALL_PREFIX={prefix}",
@@ -89,6 +135,7 @@ def install_qt(prefix, work, parallel, universal, windows_arm64=False,
         if not toolchain.is_file():
             raise RuntimeError(f"Windows ARM64 toolchain missing: {toolchain}")
         cmd.append(f"-DCMAKE_TOOLCHAIN_FILE={toolchain}")
+        cmd.append(f"-DQT_HOST_PATH={host_prefix}")
     run(*cmd)
     run("cmake", "--build", qt_build, "--parallel", str(parallel))
     run("cmake", "--install", qt_build)
@@ -102,6 +149,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sdk-root", type=Path, required=True)
     parser.add_argument("--qt-prefix", type=Path, required=True)
+    parser.add_argument("--qt-host-prefix", type=Path,
+                        help="matching host Qt 6.8.2 tools installation (Windows ARM64)")
     parser.add_argument("--qt-work", type=Path, required=True)
     parser.add_argument("--versions", nargs="+", choices=SDK_TAGS, required=True)
     parser.add_argument("--parallel", type=int, default=min(4, os.cpu_count() or 2))
@@ -119,7 +168,8 @@ def main():
         root = args.sdk_root.resolve()
         install_sdks(root, args.versions)
         install_qt(args.qt_prefix.resolve(), args.qt_work.resolve(),
-                   args.parallel, args.macos_universal, args.windows_arm64, root)
+                   args.parallel, args.macos_universal, args.windows_arm64, root,
+                   args.qt_host_prefix.resolve() if args.qt_host_prefix else None)
         return 0
     except (OSError, RuntimeError, subprocess.CalledProcessError, ValueError) as e:
         print(f"ERROR: {e}", file=sys.stderr)

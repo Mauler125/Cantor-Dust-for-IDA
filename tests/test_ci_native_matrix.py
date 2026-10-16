@@ -108,7 +108,10 @@ class NativeMatrixTests(unittest.TestCase):
         self.assertIn("if: steps.qt-cache.outputs.cache-hit != 'true'", block)
         self.assertIn("uses: actions/cache/save@v4", block)
         self.assertIn("key: ${{ steps.qt-cache.outputs.cache-primary-key }}", block)
-        self.assertIn("path: ${{ github.workspace }}/.ci/qt-prefix", block)
+        self.assertIn("${{ github.workspace }}/.ci/qt-prefix", block)
+        # Host Qt lives *inside* the target Qt prefix, so restoring older
+        # platform cache paths is unaffected by adding host tools.
+        self.assertIn("--qt-host-prefix .ci/qt-prefix/host-qt", workflow)
         # Regression: a failed IDA compile must never prevent Qt from being cached.
         self.assertNotIn("uses: actions/cache@v4", workflow)
 
@@ -135,6 +138,51 @@ class NativeMatrixTests(unittest.TestCase):
         self.assertIn('CANTORDUST_EXPECTED_TARGET_ARCH STREQUAL "ARM64"', cmake)
         self.assertIn(r'"/arm64/cl\\.exe$"', cmake)
 
+    def test_arm64_host_tools_built_before_target_qt_and_cached(self):
+        from unittest.mock import patch
+        import io
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            work = root / "work"
+            sdk_root = root / "sdk"
+            toolchain = sdk_root / "ida-sdk-9.4/src/cmake/toolchains/arm-Windows.toolchain.cmake"
+            toolchain.parent.mkdir(parents=True)
+            toolchain.write_text("# test toolchain")
+            prefix = root / "qt-prefix"
+            host_prefix = root / "qt-host-prefix"
+            calls = []
+
+            def fake_run(*args):
+                calls.append([str(arg) for arg in args])
+                if "--install" in args:
+                    install_root = host_prefix if "qtbase-host-build" in str(args[-1]) else prefix
+                    config = install_root / "lib/cmake/Qt6/Qt6Config.cmake"
+                    config.parent.mkdir(parents=True, exist_ok=True)
+                    config.write_text("# simulated Qt install")
+                    if install_root == host_prefix:
+                        info = install_root / "lib/cmake/Qt6HostInfo/Qt6HostInfoConfig.cmake"
+                        info.parent.mkdir(parents=True, exist_ok=True)
+                        info.write_text("# simulated host Qt")
+
+            with patch.object(self.deps, "run", side_effect=fake_run), \
+                 patch.object(self.deps, "verify_arm64_qt"):
+                self.deps.install_qt(prefix, work, 2, False, True, sdk_root, host_prefix)
+            host_cfg = next(i for i, args in enumerate(calls)
+                            if "qtbase-host-build" in " ".join(args) and "-S" in args)
+            target_cfg = next(i for i, args in enumerate(calls)
+                              if any(str(arg).startswith("-DQT_HOST_PATH=") for arg in args))
+            self.assertLess(host_cfg, target_cfg)
+            self.assertIn(f"-DQT_HOST_PATH={host_prefix}", calls[target_cfg])
+            self.assertFalse(any("CMAKE_TOOLCHAIN_FILE=" in x for x in calls[host_cfg]))
+            self.assertTrue(any("CMAKE_TOOLCHAIN_FILE=" in x for x in calls[target_cfg]))
+
+        workflow = (ROOT / ".github/workflows/release-draft.yml").read_text()
+        self.assertIn("qt-prefix/host-qt", workflow)
+        self.assertIn("'v3'", workflow)
+        self.assertIn("--qt-host-prefix .ci/qt-prefix/host-qt", workflow)
+        build_all = (ROOT / "scripts/build-all.py").read_text()
+        self.assertIn('cmake_args.append(f"-DQT_HOST_PATH={host_qt}")', build_all)
+
     def test_upstream_versions_are_pinned(self):
         self.assertEqual(self.deps.QT_TAG, "v6.8.2")
         self.assertEqual(set(self.deps.SDK_TAGS), {"9.2", "9.3", "9.4"})
@@ -146,7 +194,7 @@ class NativeMatrixTests(unittest.TestCase):
             self.assertIn("runner: " + runner, text)
         self.assertIn("--macos-universal", text)
         self.assertIn("--windows-arm64", text)
-        self.assertIn("matrix.arch == 'aarch64' && 'v2'", text)
+        self.assertIn("matrix.arch == 'aarch64' && 'v3'", text)
         self.assertIn("scripts/ci-verify-release.py --dist dist", text)
         self.assertIn("gh release create \"$RELEASE_TAG\" --draft", text)
         self.assertNotIn("--draft=false", text)
