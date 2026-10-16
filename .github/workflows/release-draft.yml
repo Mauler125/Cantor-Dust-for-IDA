@@ -1,13 +1,17 @@
 name: native-release-builds
 
 # Build real, versioned IDA Plugin Manager packages on GitHub-hosted machines.
-# A tag gets a draft release only after EVERY required native target succeeds.
-# Run workflow_dispatch first to inspect artifacts before tagging a release.
+# A version tag builds every native target and uploads to a draft release.
+# Publishing a release in GitHub UI also triggers this workflow, even when
+# creating its tag there does not produce a separate tag-push workflow run.
+# Run workflow_dispatch on a branch to inspect Actions artifacts first.
 on:
   workflow_dispatch:
   push:
     tags:
       - 'v[0-9]*'
+  release:
+    types: [published]
 
 permissions:
   contents: read
@@ -175,7 +179,7 @@ jobs:
         with:
           name: cantordust-all-native-zips
           path: dist
-      - name: Create or update draft release
+      - name: Create release if missing and upload native ZIPs
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
@@ -188,4 +192,4 @@ jobs:
               --title "Cantor Dust $RELEASE_TAG" --generate-notes
           fi
           gh release upload "$RELEASE_TAG" dist/*.zip --clobber
-          echo "Native packages uploaded to draft release $RELEASE_TAG. Publish after testing."
+          echo "Native packages uploaded to GitHub Release $RELEASE_TAG (existing release state preserved)."
