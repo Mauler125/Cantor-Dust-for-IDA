@@ -141,6 +141,8 @@ def main(argv=None):
     parser.add_argument("--generator", default="Ninja")
     parser.add_argument("--parallel", type=int, default=min(4, os.cpu_count() or 1))
     parser.add_argument("--cmake-arg", action="append", default=[])
+    parser.add_argument("--windows-arm64", action="store_true",
+                        help="require Windows ARM64 and use the SDK ARM64 toolchain")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--collect", nargs="+", type=Path,
                         help="only combine already built native packages from each OS")
@@ -154,6 +156,12 @@ def main(argv=None):
         package = plugin_package()
         meta = package.ValidateManifest(ROOT / "ida-plugin.json")
         host, _ = package.HostPlatform()
+        if args.windows_arm64 and host != "windows-aarch64":
+            raise ValueError("--windows-arm64 requires a Windows ARM64 runner "
+                             f"(detected {host})")
+        if host == "windows-aarch64" and not args.windows_arm64 and            os.environ.get("GITHUB_ACTIONS") == "true":
+            raise ValueError("CI Windows ARM64 builds must explicitly pass "
+                             "--windows-arm64 (to enforce SDK toolchain selection)")
         versions = list(dict.fromkeys(args.versions))
         sdks = resolve_sdks(args, versions)
         qt = args.qt_prefix.expanduser().resolve()
@@ -175,10 +183,33 @@ def main(argv=None):
                           "-DCANTORDUST_EXPECTED_QT_VERSION=6.8.2"]
             if sys.platform == "darwin":
                 cmake_args.append("-DCMAKE_OSX_ARCHITECTURES=x86_64;arm64")
+            if host == "windows-aarch64":
+                # The SDK auto-detects x64 MSVC unless this toolchain is set
+                # *before* the top-level project() call. Qt was separately
+                # compiled for ARM64; x64 objects cannot link against it.
+                toolchain = source / "cmake/toolchains/arm-Windows.toolchain.cmake"
+                if not toolchain.is_file():
+                    raise ValueError(f"ARM64 SDK toolchain missing: {toolchain}")
+                cmake_args.extend((f"-DCMAKE_TOOLCHAIN_FILE={toolchain}",
+                                   "-DCANTORDUST_EXPECTED_TARGET_ARCH=ARM64"))
             cmake_args.extend(args.cmake_arg)
             print(f"\nBuilding IDA {version} for {host} "
                   f"({'native SDK CMake' if modern else 'legacy SDK adapter'})")
             run(cmake_args, args.dry_run)
+            if not args.dry_run and host == "windows-aarch64":
+                # Detect a misconfigured compiler before the costly full build.
+                compiler = next((line.split("=", 1)[1] for line in
+                    (build / "CMakeCache.txt").read_text(errors="replace").splitlines()
+                    if line.startswith("CMAKE_CXX_COMPILER:")), "")
+                normalized = compiler.replace("\\", "/").lower()
+                if not normalized.endswith("/arm64/cl.exe"):
+                    raise ValueError("Windows ARM64 needs an ARM64 compiler; "
+                        f"CMake configured {compiler!r}")
+                # The compiler path alone is insufficient: a stale CMake
+                # cache could still have x64 architecture/linker settings.
+                cache = (build / "CMakeCache.txt").read_text(errors="replace")
+                if "CANTORDUST_EXPECTED_TARGET_ARCH:UNINITIALIZED=ARM64" not in cache and                    "CANTORDUST_EXPECTED_TARGET_ARCH:STRING=ARM64" not in cache:
+                    raise ValueError("Windows ARM64 CMake guard was not enabled")
             run(["cmake", "--build", build, "--config", "Release", "--target",
                  "cantor_dust", "--parallel", str(args.parallel)], args.dry_run)
             if not args.dry_run:

@@ -53,6 +53,23 @@ if(CANTORDUST_BUILD_IDA_PLUGIN)
 endif()
 
 project(ida_cantordust VERSION 0.8.0 LANGUAGES CXX)
+
+# A native ARM64 runner can still pick the emulated x64 MSVC toolchain.
+# Fail during configuration, before any 46-step compile or costly link.
+if(CANTORDUST_BUILD_IDA_PLUGIN AND WIN32 AND
+   CANTORDUST_EXPECTED_TARGET_ARCH STREQUAL "ARM64")
+    string(REPLACE "\\" "/" _cd_compiler_path "${CMAKE_CXX_COMPILER}")
+    string(TOLOWER "${_cd_compiler_path}" _cd_compiler_path)
+    if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "^(ARM64|arm64|aarch64)$" OR
+       NOT _cd_compiler_path MATCHES "/arm64/cl\\.exe$")
+        message(FATAL_ERROR
+            "Windows ARM64 target selected, but CMake configured "
+            "${CMAKE_CXX_COMPILER} for ${CMAKE_SYSTEM_PROCESSOR}. "
+            "Pass the SDK arm-Windows.toolchain.cmake before project().")
+    endif()
+    message(STATUS "Cantor Dust native target architecture: Windows ARM64")
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -566,6 +583,14 @@ if(CANTORDUST_BUILD_IDA_PLUGIN)
             "IDA SDK skipped cantor_dust. Check that your Qt6 build "
             "matches the Qt namespace, version and ABI required by IDA. "
             "Point CMAKE_PREFIX_PATH at that Qt installation.")
+    endif()
+
+    # The SDK's ida_add_plugin() creates a CMake MODULE target, which by
+    # default gets a .so suffix even on macOS. The HCLI native plugin
+    # packager and IDA's macOS plugin layout require a .dylib file.
+    # Apply this after ida_add_plugin for both legacy and native SDKs.
+    if(APPLE)
+        set_target_properties(cantor_dust PROPERTIES SUFFIX ".dylib")
     endif()
 
     # Embed icons into the plugin: no dependency on the caller's working

@@ -113,11 +113,19 @@ jobs:
         shell: bash
         env:
           TARGET_VERSIONS: ${{ matrix.versions }}
+          TARGET_ARCH: ${{ matrix.arch }}
         run: |
           read -ra versions <<< "$TARGET_VERSIONS"
+          extra=()
+          # Make the ARM64 compiler selection explicit; do not allow the
+          # Windows SDK auto-discovery to fall back to emulated x64 MSVC.
+          if [[ "$RUNNER_OS" == Windows && "$TARGET_ARCH" == aarch64 ]]; then
+            extra+=(--windows-arm64)
+          fi
           python scripts/build-all.py --sdk-root .ci/sdks \
             --qt-prefix .ci/qt-prefix --versions "${versions[@]}" \
-            --build-root .ci/native-build --output dist --parallel 4
+            --build-root .ci/native-build --output dist --parallel 4 \
+            "${extra[@]}"
       - name: Upload installable native ZIPs
         uses: actions/upload-artifact@v4
         with:
