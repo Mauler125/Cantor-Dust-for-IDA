@@ -53,8 +53,11 @@ class MultiVersionBuildTests(unittest.TestCase):
             rc = module.main(["--dry-run", "--windows-arm64", "--sdk", f"9.4={source.parent}",
                               "--versions", "9.4", "--qt-prefix", str(qt)])
         self.assertEqual(rc, 0, log.getvalue())
-        self.assertIn(f"-DCMAKE_TOOLCHAIN_FILE={source / 'cmake/toolchains/arm-Windows.toolchain.cmake'}",
-                      log.getvalue())
+        # build-all.py resolves SDK paths before it passes them to CMake.
+        # Windows expands 8.3 short names; macOS resolves /var -> /private/var.
+        # Match the canonical path instead of the temporary directory's alias.
+        toolchain = (source / "cmake/toolchains/arm-Windows.toolchain.cmake").resolve()
+        self.assertIn(f"-DCMAKE_TOOLCHAIN_FILE={toolchain}", log.getvalue())
         self.assertIn("-DCANTORDUST_EXPECTED_TARGET_ARCH=ARM64", log.getvalue())
 
     def test_arm64_flag_rejects_non_arm64_host(self):
