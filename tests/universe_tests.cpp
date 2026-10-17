@@ -1853,6 +1853,6 @@ int main()
     Tests_RangeAndCallerFocus();
     Tests_DepthOcclusionAndCameraTranslation();
     Tests_CallSiteCyclingAndLayout();
-    std::cout << "Function Universe graph tests passed.\n";
+    std::cout << "Universe graph tests passed.\n";
     return 0;
 }

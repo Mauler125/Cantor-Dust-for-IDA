@@ -14,11 +14,11 @@ Explore binary data and function relationships in a dockable IDA panel. Visualiz
 
 ## Features
 
-### 3D Function Universe
+### 3D Universe
 
 Explore callers, callees, and function references in an interactive 3D network graph. Focus a function, expand its neighbors, and filter the view.
 
-![3D Function Universe in IDA](examples/function_universe.gif)
+![3D Universe in IDA](examples/function_universe.gif)
 
 ### Call Paths
 
@@ -42,7 +42,7 @@ Explore byte distributions in cube, sphere, cylinder, and tetrahedron layouts.
 
 ### Investigation Bookmarks
 
-Save named snapshots of your investigation, including the selected byte range, visualization settings, Function Universe focus, filters, call paths, and camera position. Bookmarks live in the current IDA database. Use **File > Investigation Bookmarks** to save, restore, rename, or delete them.
+Save named snapshots of your investigation, including the selected byte range, visualization settings, universe focus, filters, call paths, and camera position. Bookmarks live in the current IDA database. Use **File > Investigation Bookmarks** to save, restore, rename, or delete them.
 
 ![Investogation Bookmarks](examples/bookmarks.png)
 

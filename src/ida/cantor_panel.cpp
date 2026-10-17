@@ -108,10 +108,10 @@ QColor ReadableLinkColor( const QPalette& palette )
 
 static void Ida_AddViewOptions( QComboBox* const box )
 {
-    box->addItem( "Linear", QVariant::fromValue< int >( CDV_LINEAR ) );
-    box->addItem( "Digraph", QVariant::fromValue< int >( CDV_DIGRAPH ) );
-    box->addItem( "Histogram", QVariant::fromValue< int >( CDV_HISTOGRAM ) );
-    box->addItem( "Hilbert", QVariant::fromValue< int >( CDV_HILBERT ) );
+    box->addItem( "Linear Bitmap", QVariant::fromValue< int >( CDV_LINEAR ) );
+    box->addItem( "Byte-Pair Heatmap", QVariant::fromValue< int >( CDV_DIGRAPH ) );
+    box->addItem( "2D Histogram", QVariant::fromValue< int >( CDV_HISTOGRAM ) );
+    box->addItem( "Hilbert Curve", QVariant::fromValue< int >( CDV_HILBERT ) );
     box->setCurrentIndex( CDV_HILBERT );
 }
 
@@ -231,7 +231,7 @@ CantorPanel::CantorPanel( QWidget* const parent )
     m_overviewViewBox->addItem( "3D Byte Cloud",
         QVariant::fromValue< int >( CDV_CUBE3D ) );
 
-    m_overviewViewBox->addItem( "3D Function Universe",
+    m_overviewViewBox->addItem( "3D Universe",
         QVariant::fromValue< int >( CDV_UNIVERSE3D ) );
 
     modeRow->addWidget( m_overviewViewBox, 1 );
@@ -240,7 +240,7 @@ CantorPanel::CantorPanel( QWidget* const parent )
     m_viewBox->addItem( "3D Byte Cloud",
         QVariant::fromValue< int >( CDV_CUBE3D ) );
 
-    m_viewBox->addItem( "3D Function Universe",
+    m_viewBox->addItem( "3D Universe",
         QVariant::fromValue< int >( CDV_UNIVERSE3D ) );
 
     m_viewBox->setCurrentIndex( m_viewBox->findData( CDV_UNIVERSE3D ) );
@@ -871,7 +871,7 @@ CantorPanel::CantorPanel( QWidget* const parent )
     searchLayout->addWidget( m_universeFilterToggle );
     searchLayout->addWidget( m_universeClusterToggle );
     QLabel* const searchHelp = new QLabel(
-        "Filter view limits the displayed Function Universe to the search "
+        "Filter view limits the displayed universe to the search "
         "results. Clusters groups related functions into communities. "
         "Both can also be toggled from Tools > Search & Graph.", searchPage );
     searchHelp->setWordWrap( true );

@@ -61,7 +61,7 @@ inline void Math_CubeMapTetrahedron( f32& x, f32& y, f32& z )
     z = ( a + b - 2.0f * c ) * 0.2357022603955158f; // 1/sqrt(18)
 }
 
-// Shared guide vertices for both 3D Byte Cloud and Function Universe globals.
+// Shared guide vertices for both 3D Byte Cloud and Universe globals.
 // Derive the corners from the same mapping as the cloud points so the shape,
 // centroid, and edge lengths cannot diverge between renderers.
 inline const std::array< std::array< f32, 3 >, 4 >&

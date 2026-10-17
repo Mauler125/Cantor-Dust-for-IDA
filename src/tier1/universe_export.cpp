@@ -110,7 +110,7 @@ std::string Universe_ExportDot( const UniverseGraph_s& graph )
 {
     std::ostringstream out;
     out << "digraph \"Cantor Dust\" {\n"
-        << "  graph [label=\"Cantor Dust Function Universe\", labelloc=t, "
+        << "  graph [label=\"Cantor Dust Universe\", labelloc=t, "
         << "overlap=false, splines=true];\n"
         << "  node [shape=ellipse, style=filled, fontname=\"Consolas\"];\n";
 
@@ -232,7 +232,7 @@ std::string Universe_ExportSvg( const UniverseGraph_s& graph,
         << "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" << width
         << "\" height=\"" << height << "\" viewBox=\"0 0 " << width
         << ' ' << height << "\">\n"
-        << "  <title>Cantor Dust Function Universe</title>\n"
+        << "  <title>Cantor Dust Universe</title>\n"
         << "  <rect width=\"100%\" height=\"100%\" fill=\""
         << Rgb( colors.background3d ) << "\"/>\n"
         << "  <!-- True vector shapes; all directions are retained. -->\n";

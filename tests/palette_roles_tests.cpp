@@ -38,7 +38,7 @@ int main()
 
         // The Cube still draws its orientation wireframe without data, so
         // check unobstructed corners instead of requiring a completely blank
-        // image. The empty Function Universe draws only its background.
+        // image. The empty universe draws only its background.
         const Image_s cloud = Cube_Render( {}, {}, 320u, 240u, mode );
         assert( cloud.argb.size() == 320u * 240u );
         assert( cloud.argb.front() == palette.background3d );

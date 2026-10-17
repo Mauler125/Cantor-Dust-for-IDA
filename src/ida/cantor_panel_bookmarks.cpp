@@ -424,8 +424,8 @@ void CantorPanel::ExportUniverseGraph( const UniverseExportFormat_e format )
 
     if ( !hasDetail && !hasOverview )
     {
-        QMessageBox::information( this, "Export Function Universe",
-            "Switch the Overview or Detail view to 3D Function Universe "
+        QMessageBox::information( this, "Export Universe",
+            "Switch the Overview or Detail view to 3D Universe "
             "and load a graph before exporting." );
 
         return;
@@ -438,7 +438,7 @@ void CantorPanel::ExportUniverseGraph( const UniverseExportFormat_e format )
         bool accepted = false;
 
         const QString choice = QInputDialog::getItem( this,
-            "Export Function Universe", "Which graph?",
+            "Export Universe", "Which graph?",
             { "Overview Universe", "Detail Universe" }, 0, false, &accepted );
 
         if ( !accepted )
@@ -469,7 +469,7 @@ void CantorPanel::ExportUniverseGraph( const UniverseExportFormat_e format )
     }
 
     QString filename = QFileDialog::getSaveFileName( this,
-        "Export Function Universe", suggestedName,
+        "Export Universe", suggestedName,
         format == UniverseExportFormat_e::Choose
             ? pngFilter + ";;" + svgFilter + ";;" + dotFilter
             : chosenFormat,
@@ -521,7 +521,7 @@ void CantorPanel::ExportUniverseGraph( const UniverseExportFormat_e format )
 
     if ( !success )
     {
-        QMessageBox::warning( this, "Export Function Universe",
+        QMessageBox::warning( this, "Export Universe",
             QString( "Could not export the graph to:\n%1" ).arg( filename ) );
 
         return;
