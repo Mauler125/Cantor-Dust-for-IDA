@@ -109,9 +109,9 @@ QColor ReadableLinkColor( const QPalette& palette )
 static void Ida_AddViewOptions( QComboBox* const box )
 {
     box->addItem( "Linear Bitmap", QVariant::fromValue< int >( CDV_LINEAR ) );
+    box->addItem( "Hilbert Curve", QVariant::fromValue< int >( CDV_HILBERT ) );
     box->addItem( "Byte-Pair Heatmap", QVariant::fromValue< int >( CDV_DIGRAPH ) );
     box->addItem( "2D Histogram", QVariant::fromValue< int >( CDV_HISTOGRAM ) );
-    box->addItem( "Hilbert Curve", QVariant::fromValue< int >( CDV_HILBERT ) );
     box->setCurrentIndex( CDV_HILBERT );
 }
 

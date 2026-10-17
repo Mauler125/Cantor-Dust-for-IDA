@@ -284,17 +284,17 @@ Image_s Render( const View_e view,
                 Palette_ByteColorTable( paletteIndex ).data() );
             break;
 
+        case CDV_HILBERT:
+            Render_ByteRaster( image, data, true, palette,
+                Palette_ByteColorTable( paletteIndex ).data() );
+            break;
+
         case CDV_DIGRAPH:
             Render_Digraph( image, data, palette, options );
             break;
 
         case CDV_HISTOGRAM:
             Render_Histogram( image, data, paletteIndex, options );
-            break;
-
-        case CDV_HILBERT:
-            Render_ByteRaster( image, data, true, palette,
-                Palette_ByteColorTable( paletteIndex ).data() );
             break;
 
         default:

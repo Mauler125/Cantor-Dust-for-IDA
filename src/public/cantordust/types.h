@@ -62,9 +62,9 @@ struct ByteClassSummary_s
 enum View_e
 {
     CDV_LINEAR = 0,
+    CDV_HILBERT,
     CDV_DIGRAPH,
     CDV_HISTOGRAM,
-    CDV_HILBERT,
     CDV_CUBE3D,
     CDV_UNIVERSE3D,
 };
