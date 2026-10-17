@@ -170,8 +170,9 @@ void CantorPanel::RenderCurrent()
         m_plot->SetImage( m_detailSampled
             ? cantordust::RenderOverview( mode, m_detailSampleClasses,
                 m_cells, m_detailSampleOffsets,
-                Resolution(), CurrentPalette() )
-            : RenderDetail( mode, m_cells, Resolution(), CurrentPalette() ) );
+                Resolution(), CurrentPalette(), CurrentBytePlotOptions() )
+            : RenderDetail( mode, m_cells, Resolution(), CurrentPalette(),
+                CurrentBytePlotOptions() ) );
     }
 
     RenderOverview();
@@ -266,7 +267,8 @@ void CantorPanel::RenderOverview()
             m_overviewPlot->SetViewMode( mode );
             m_overviewPlot->SetImage( cantordust::RenderOverview(
                 mode, m_overviewClasses, m_overviewCells,
-                m_overviewOffsets, Resolution(), CurrentOverviewPalette() ) );
+                m_overviewOffsets, Resolution(), CurrentOverviewPalette(),
+                CurrentBytePlotOptions() ) );
         }
 
         m_entropyStrip->SetSamples( Math_EntropyProfile(

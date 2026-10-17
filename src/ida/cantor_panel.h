@@ -8,6 +8,7 @@
 #include "ida/universe_widget.h"
 #include "cantordust/universe.h"
 #include "cantordust/palette.h"
+#include "cantordust/renderer.h"
 #include "ida/entropy_widget.h"
 #include "math/ranges.h"
 #include "tier1/universe_history.h"
@@ -47,6 +48,7 @@ private:
     usize Resolution() const;
     Palette_e CurrentPalette() const;
     Palette_e CurrentOverviewPalette() const;
+    BytePlotOptions_s CurrentBytePlotOptions() const;
     usize WindowCapacity() const;
     void SyncRangeControl();
     void UpdateWindowInfoLabel();
@@ -148,6 +150,12 @@ private:
     QSpinBox* const m_universeFanoutEdit;
     QWidget* const m_supplementalFeatures;
     QWidget* const m_cubeFeaturesPanel;
+    QWidget* const m_bytePlotFeaturesPanel;
+    QWidget* const m_histogramFeaturesRow;
+    QWidget* const m_digraphFeaturesRow;
+    QComboBox* const m_histogramScaleBox;
+    QComboBox* const m_digraphIntensityBox;
+    QSpinBox* const m_digraphDistanceEdit;
     QWidget* const m_universeExplorerPanel;
     QWidget* const m_universeSearchOptions;
     QWidget* const m_universeNeighborsControls;

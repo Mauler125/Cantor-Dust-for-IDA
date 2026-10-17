@@ -118,6 +118,9 @@ QJsonObject CantorPanel::CaptureInvestigation() const
     item.insert( "hideGlobals", m_filterGlobals->isChecked() );
     item.insert( "minIncoming", m_filterMinimumIncoming->value() );
     item.insert( "minOutgoing", m_filterMinimumOutgoing->value() );
+    item.insert( "histogramScale", m_histogramScaleBox->currentIndex() );
+    item.insert( "digraphIntensity", m_digraphIntensityBox->currentIndex() );
+    item.insert( "digraphDistance", m_digraphDistanceEdit->value() );
     item.insert( "cubeGeometry", m_cubeGeometryBox->currentIndex() );
     item.insert( "cubeValues", m_cubeValuesBox->currentIndex() );
     item.insert( "cubeStride", m_cubeStrideEdit->value() );
@@ -264,6 +267,21 @@ bool CantorPanel::RestoreInvestigation( const QJsonObject& item )
         m_filterMinimumIncoming->setValue( item.value( "minIncoming" ).toInt() );
         m_filterMinimumOutgoing->setValue( item.value( "minOutgoing" ).toInt() );
     }
+    // Old bookmarks do not contain these fields; preserve active preferences.
+    {
+        const QSignalBlocker histogramBlock( m_histogramScaleBox );
+        const QSignalBlocker intensityBlock( m_digraphIntensityBox );
+        const QSignalBlocker distanceBlock( m_digraphDistanceEdit );
+        m_histogramScaleBox->setCurrentIndex( std::clamp(
+            item.value( "histogramScale" ).toInt(
+                m_histogramScaleBox->currentIndex() ), 0, 2 ) );
+        m_digraphIntensityBox->setCurrentIndex( std::clamp(
+            item.value( "digraphIntensity" ).toInt(
+                m_digraphIntensityBox->currentIndex() ), 0, 1 ) );
+        m_digraphDistanceEdit->setValue( std::clamp(
+            item.value( "digraphDistance" ).toInt(
+                m_digraphDistanceEdit->value() ), 1, 256 ) );
+    }
     // Newer investigation bookmarks also preserve their byte-cloud settings;
     // older bookmarks leave the current preferences untouched.
     {
@@ -317,6 +335,9 @@ bool CantorPanel::RestoreInvestigation( const QJsonObject& item )
     preferences.setValue( "advancedHideGlobals", m_filterGlobals->isChecked() );
     preferences.setValue( "advancedMinimumIncoming", m_filterMinimumIncoming->value() );
     preferences.setValue( "advancedMinimumOutgoing", m_filterMinimumOutgoing->value() );
+    preferences.setValue( "histogramScale", m_histogramScaleBox->currentIndex() );
+    preferences.setValue( "digraphIntensity", m_digraphIntensityBox->currentIndex() );
+    preferences.setValue( "digraphDistance", m_digraphDistanceEdit->value() );
     preferences.setValue( "cubeGeometry", m_cubeGeometryBox->currentIndex() );
     preferences.setValue( "cubeValues", m_cubeValuesBox->currentIndex() );
     preferences.setValue( "cubeStride", m_cubeStrideEdit->value() );

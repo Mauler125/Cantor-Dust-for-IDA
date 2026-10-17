@@ -3,6 +3,7 @@
 
 
 #include "cantordust/scalar_types.h"
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -80,6 +81,13 @@ struct Image_s
     usize height = CANTORDUST_SIDE;
     std::vector< u32 > argb;
     std::vector< usize > sourceIndex;
+    // Populated for Histogram (256 bins) and Digraph (65,536 bins).
+    // Counts describe the actual rendered sample, including Overview.
+    std::vector< u32 > bucketCounts;
+    std::array< u32, 256 > firstByteTotals{};
+    usize observationCount = 0;
+    usize pairDistance = 1;
+    bool conditionalProbability = false;
 
     usize SourceAt( const usize x, const usize y ) const
     {

@@ -35,6 +35,7 @@ public:
 
     void SetOnNavigate( std::function< void( usize ) > callback );
     void SetOnHover( std::function< void( usize ) > callback );
+    void SetAddressFormatter( std::function< QString( usize ) > callback );
 
 protected:
     void paintEvent( QPaintEvent* event ) override;
@@ -55,6 +56,7 @@ private:
     void UpdateHover( const QPoint& position );
     void ClearHover();
     void NavigateAt( const QPoint& position, bool force );
+    void ShowBucketInspection( const QPoint& position, const QPoint& pixel );
 
     Palette_e m_palette = CDP_REFERENCE;
     Image_s m_image;
@@ -68,6 +70,8 @@ private:
     int m_wheelRemainder = 0;
     QPoint m_hoverPixel{ -1, -1 };
     usize m_hoverSource = CANTORDUST_NO_SOURCE;
+    usize m_inspectedBucket = CANTORDUST_NO_SOURCE;
+    std::function< QString( usize ) > m_addressFormatter;
     std::function< void( usize ) > m_onNavigate;
     std::function< void( usize ) > m_onHover;
     NavigationGate m_navigationGate;

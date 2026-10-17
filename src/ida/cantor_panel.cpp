@@ -140,6 +140,12 @@ CantorPanel::CantorPanel( QWidget* const parent )
     , m_universeFanoutEdit( new QSpinBox( m_settingsDialog ) )
     , m_supplementalFeatures( new QWidget( this ) )
     , m_cubeFeaturesPanel( new QWidget( m_supplementalFeatures ) )
+    , m_bytePlotFeaturesPanel( new QWidget( m_supplementalFeatures ) )
+    , m_histogramFeaturesRow( new QWidget( m_bytePlotFeaturesPanel ) )
+    , m_digraphFeaturesRow( new QWidget( m_bytePlotFeaturesPanel ) )
+    , m_histogramScaleBox( new QComboBox( m_histogramFeaturesRow ) )
+    , m_digraphIntensityBox( new QComboBox( m_digraphFeaturesRow ) )
+    , m_digraphDistanceEdit( new QSpinBox( m_digraphFeaturesRow ) )
     , m_universeExplorerPanel( new QWidget( m_supplementalFeatures ) )
     , m_universeSearchOptions( new FlexibleWidthPanel( m_universeExplorerPanel ) )
     , m_universeNeighborsControls( new FlexibleWidthPanel( m_universeSearchOptions ) )
@@ -261,8 +267,72 @@ CantorPanel::CantorPanel( QWidget* const parent )
     supplementalLayout->setContentsMargins( 0, 0, 0, 0 );
     supplementalLayout->setSpacing( 4 );
     supplementalLayout->addWidget( m_cubeFeaturesPanel );
+    supplementalLayout->addWidget( m_bytePlotFeaturesPanel );
     supplementalLayout->addWidget( m_universeExplorerPanel );
     root->addWidget( m_supplementalFeatures );
+    // Shared analysis controls apply to both Detail and Overview when either
+    // canvas uses the associated 2D visualization.
+    QVBoxLayout* const analysisLayout = new QVBoxLayout( m_bytePlotFeaturesPanel );
+    analysisLayout->setContentsMargins( 0, 0, 0, 0 );
+    analysisLayout->setSpacing( 3 );
+    QHBoxLayout* const histogramRow = new QHBoxLayout( m_histogramFeaturesRow );
+    histogramRow->setContentsMargins( 0, 0, 0, 0 );
+    histogramRow->addWidget( new QLabel( "Histogram scale:", m_histogramFeaturesRow ) );
+    m_histogramScaleBox->addItems( { "Logarithmic", "Linear", "Square Root" } );
+    m_histogramScaleBox->setToolTip( "Scale histogram bar heights. "
+        "Bars are colored using the selected byte palette." );
+    histogramRow->addWidget( m_histogramScaleBox, 1 );
+    analysisLayout->addWidget( m_histogramFeaturesRow );
+
+    QHBoxLayout* const digraphRow = new QHBoxLayout( m_digraphFeaturesRow );
+    digraphRow->setContentsMargins( 0, 0, 0, 0 );
+    digraphRow->addWidget( new QLabel( "Byte pairs:", m_digraphFeaturesRow ) );
+    m_digraphIntensityBox->addItems( { "Frequency (log)",
+        "Conditional Probability" } );
+    m_digraphIntensityBox->setSizePolicy( QSizePolicy::Ignored, QSizePolicy::Fixed );
+    m_digraphIntensityBox->setMinimumWidth( 100 );
+    m_digraphIntensityBox->setToolTip( "Frequency: raw byte-pair counts. "
+        "Probability: P(second byte | first byte)." );
+    digraphRow->addWidget( m_digraphIntensityBox, 1 );
+    digraphRow->addWidget( new QLabel( "Distance:", m_digraphFeaturesRow ) );
+    m_digraphDistanceEdit->setRange( 1, 256 );
+    m_digraphDistanceEdit->setMinimumWidth( 64 );
+    m_digraphDistanceEdit->setToolTip( "Distance in observed sample cells "
+        "between the first and second byte. 1 means adjacent bytes. "
+        "When Overview samples a large range, this distance counts samples." );
+    digraphRow->addWidget( m_digraphDistanceEdit );
+    analysisLayout->addWidget( m_digraphFeaturesRow );
+
+    const QSettings bytePlotSettings( "CantorDust", "IDA" );
+    m_histogramScaleBox->setCurrentIndex( std::clamp(
+        bytePlotSettings.value( "histogramScale", 0 ).toInt(), 0, 2 ) );
+    m_digraphIntensityBox->setCurrentIndex( std::clamp(
+        bytePlotSettings.value( "digraphIntensity", 0 ).toInt(), 0, 1 ) );
+    m_digraphDistanceEdit->setValue( std::clamp(
+        bytePlotSettings.value( "digraphDistance", 1 ).toInt(), 1, 256 ) );
+    const auto updateBytePlots = [this]() {
+        QSettings settings( "CantorDust", "IDA" );
+        settings.setValue( "histogramScale", m_histogramScaleBox->currentIndex() );
+        settings.setValue( "digraphIntensity", m_digraphIntensityBox->currentIndex() );
+        settings.setValue( "digraphDistance", m_digraphDistanceEdit->value() );
+        m_overviewImageDirty = true;
+        const View_e detail = static_cast< View_e >(
+            m_viewBox->currentData().toInt() );
+        if ( detail == CDV_HISTOGRAM || detail == CDV_DIGRAPH )
+            RenderCurrent();
+        else
+            RenderOverview();
+    };
+    QObject::connect( m_histogramScaleBox,
+        QOverload< int >::of( &QComboBox::currentIndexChanged ),
+        this, [updateBytePlots]( int ) { updateBytePlots(); } );
+    QObject::connect( m_digraphIntensityBox,
+        QOverload< int >::of( &QComboBox::currentIndexChanged ),
+        this, [updateBytePlots]( int ) { updateBytePlots(); } );
+    QObject::connect( m_digraphDistanceEdit,
+        QOverload< int >::of( &QSpinBox::valueChanged ),
+        this, [updateBytePlots]( int ) { updateBytePlots(); } );
+
     modeRow->addWidget( new QLabel( "Range:", this ) );
     m_resolutionBox->addItem( "256 x 256", QVariant::fromValue< int >( 256 ) );
     m_resolutionBox->addItem( "512 x 512", QVariant::fromValue< int >( 512 ) );
@@ -1480,6 +1550,19 @@ CantorPanel::CantorPanel( QWidget* const parent )
     m_plot->SetOnHover( [this]( const usize index ) {
         Hover( index );
     });
+    m_plot->SetAddressFormatter( [this]( const usize index ) {
+        const u64 logical = m_detailSampled ? index : m_windowOffset + index;
+        u64 address = 0;
+        return Math_OffsetToAddress( m_ranges, logical, address )
+            ? Ida_FormatAddress( static_cast< ea_t >( address ) )
+            : QStringLiteral( "Unknown" );
+    } );
+    m_overviewPlot->SetAddressFormatter( [this]( const usize offset ) {
+        u64 address = 0;
+        return Math_OffsetToAddress( m_ranges, offset, address )
+            ? Ida_FormatAddress( static_cast< ea_t >( address ) )
+            : QStringLiteral( "Unknown" );
+    } );
     m_overviewCube->SetOnNavigate( [this]( const usize offset ) {
         NavigateOverview( offset );
     } );
@@ -1806,10 +1889,26 @@ CantorPanel::CantorPanel( QWidget* const parent )
     OnIdaCursorChanged( get_screen_ea() );
 }
 
+BytePlotOptions_s CantorPanel::CurrentBytePlotOptions() const
+{
+    BytePlotOptions_s options;
+    options.histogramScale = static_cast< HistogramScale_e >(
+        m_histogramScaleBox->currentIndex() );
+    options.digraphIntensity = static_cast< DigraphIntensity_e >(
+        m_digraphIntensityBox->currentIndex() );
+    options.digraphDistance = static_cast< usize >(
+        m_digraphDistanceEdit->value() );
+    return options;
+}
+
 QWidget* CantorPanel::SupplementalFeaturesForMode( const View_e mode ) const
 {
     switch ( mode )
     {
+        case CDV_HISTOGRAM:
+        case CDV_DIGRAPH:
+            return m_bytePlotFeaturesPanel;
+
         case CDV_CUBE3D:
             return m_cubeFeaturesPanel;
 
@@ -1833,12 +1932,21 @@ void CantorPanel::UpdateSupplementalFeatures()
 
     const bool showCube = detailFeatures == m_cubeFeaturesPanel ||
         overviewFeatures == m_cubeFeaturesPanel;
+    const bool showHistogram = detailMode == CDV_HISTOGRAM ||
+        overviewMode == CDV_HISTOGRAM;
+    const bool showDigraph = detailMode == CDV_DIGRAPH ||
+        overviewMode == CDV_DIGRAPH;
+    const bool showBytePlot = showHistogram || showDigraph;
     const bool showUniverse = detailFeatures == m_universeExplorerPanel ||
         overviewFeatures == m_universeExplorerPanel;
 
     m_cubeFeaturesPanel->setVisible( showCube );
+    m_histogramFeaturesRow->setVisible( showHistogram );
+    m_digraphFeaturesRow->setVisible( showDigraph );
+    m_bytePlotFeaturesPanel->setVisible( showBytePlot );
     m_universeExplorerPanel->setVisible( showUniverse );
-    m_supplementalFeatures->setVisible( showCube || showUniverse );
+    m_supplementalFeatures->setVisible(
+        showCube || showUniverse || showBytePlot );
 
     if ( showUniverse )
         UpdateUniverseSearchLayout( m_universeExplorerPanel->width() );

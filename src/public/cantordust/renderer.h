@@ -9,14 +9,26 @@
 namespace cantordust
 {
 
+enum class HistogramScale_e { Logarithmic, Linear, SquareRoot };
+enum class DigraphIntensity_e { Frequency, ConditionalProbability };
+
+struct BytePlotOptions_s
+{
+    HistogramScale_e histogramScale = HistogramScale_e::Logarithmic;
+    DigraphIntensity_e digraphIntensity = DigraphIntensity_e::Frequency;
+    usize digraphDistance = 1;
+};
+
 Image_s Render( View_e view, const std::vector< ByteCell_s >& data,
     usize side = CANTORDUST_SIDE,
-    Palette_e palette = CDP_REFERENCE );
+    Palette_e palette = CDP_REFERENCE,
+    BytePlotOptions_s options = {} );
 
 Image_s RenderDetail( View_e view,
     const std::vector< ByteCell_s >& data,
     usize side = CANTORDUST_SIDE,
-    Palette_e palette = CDP_REFERENCE );
+    Palette_e palette = CDP_REFERENCE,
+    BytePlotOptions_s options = {} );
 
 Image_s RenderHilbertOverview(
     const std::vector< ByteClassSummary_s >& classes,
@@ -30,7 +42,8 @@ Image_s RenderOverview(
     const std::vector< ByteCell_s >& data,
     const std::vector< usize >& sourceOffsets,
     usize side,
-    Palette_e palette = CDP_REFERENCE );
+    Palette_e palette = CDP_REFERENCE,
+    BytePlotOptions_s options = {} );
 
 Image_s RenderLinearMapped(
     const std::vector< ByteCell_s >& data,

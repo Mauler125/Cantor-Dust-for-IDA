@@ -63,6 +63,84 @@ static void Tests_RenderModes()
     assert( hilbert.SourceAt( missing.x, missing.y ) == CANTORDUST_NO_SOURCE );
 }
 
+static void Tests_BytePlotAnalysis()
+{
+    const std::vector< ByteCell_s > data = {
+        { 0x41, true }, { 0x42, true }, { 0x41, true },
+        { 0x43, true }, { 0xff, false }, { 0x41, true },
+        { 0x42, true }, { 0x41, true } };
+    BytePlotOptions_s options;
+    const Image_s histogram = Render( CDV_HISTOGRAM, data, 256,
+        CDP_REFERENCE, options );
+    assert( histogram.bucketCounts.size() == 256 );
+    assert( histogram.observationCount == 7 );
+    assert( histogram.bucketCounts[ 0x41 ] == 4 );
+    assert( histogram.bucketCounts[ 0x42 ] == 2 );
+    assert( histogram.bucketCounts[ 0xff ] == 0 );
+    assert( histogram.SourceAt( 0x41, 0 ) == 0 );
+    assert( histogram.argb[ 255 * 256 + 0x41 ] ==
+        Palette_ByteColor( 0x41, Palette_Get( CDP_REFERENCE ) ) );
+    options.histogramScale = HistogramScale_e::Linear;
+    const Image_s linear = Render( CDV_HISTOGRAM, data, 256,
+        CDP_REFERENCE, options );
+    options.histogramScale = HistogramScale_e::SquareRoot;
+    const Image_s sqrtImage = Render( CDV_HISTOGRAM, data, 256,
+        CDP_REFERENCE, options );
+    options.histogramScale = HistogramScale_e::Logarithmic;
+    const Image_s logImage = Render( CDV_HISTOGRAM, data, 256,
+        CDP_REFERENCE, options );
+    // Less common bytes remain visible under all three scaling rules.
+    const auto countPixels = []( const Image_s& image, usize x ) {
+        usize nonBackground = 0;
+        const u32 background = Palette_Get( CDP_REFERENCE ).background;
+        for ( usize y = 0; y < 256; ++y )
+            nonBackground += image.argb[ y * 256 + x ] != background;
+        return nonBackground;
+    };
+    assert( countPixels( linear, 0x42 ) <= countPixels( sqrtImage, 0x42 ) );
+    assert( countPixels( logImage, 0x42 ) <= countPixels( sqrtImage, 0x42 ) );
+
+    const Image_s freq = Render( CDV_DIGRAPH, data, 256,
+        CDP_REFERENCE, options );
+    const usize ab = ( 255 - 0x42 ) * 256 + 0x41;
+    const usize ac = ( 255 - 0x43 ) * 256 + 0x41;
+    assert( freq.observationCount == 5 );
+    assert( freq.bucketCounts[ ab ] == 2 );
+    assert( freq.bucketCounts[ ac ] == 1 );
+    assert( freq.firstByteTotals[ 0x41 ] == 3 );
+    assert( freq.SourceAt( 0x41, 255 - 0x42 ) == 0 );
+
+    options.digraphIntensity = DigraphIntensity_e::ConditionalProbability;
+    const Image_s conditional = Render( CDV_DIGRAPH, data, 256,
+        CDP_REFERENCE, options );
+    assert( conditional.conditionalProbability );
+    assert( conditional.bucketCounts == freq.bucketCounts );
+    assert( conditional.argb[ ab ] != freq.argb[ ab ] );
+    options.digraphDistance = 2;
+    const Image_s distant = Render( CDV_DIGRAPH, data, 512,
+        CDP_REFERENCE, options );
+    // 41 -> 41 twice, without counting pairs crossing the unloaded byte.
+    assert( distant.bucketCounts[ ( 255 - 0x41 ) * 256 + 0x41 ] == 2 );
+    assert( distant.observationCount == 3 );
+    assert( distant.SourceAt( 0x41 * 2, ( 255 - 0x41 ) * 2 ) == 0 );
+    assert( distant.pairDistance == 2 );
+    options.digraphDistance = 0;
+    bool rejected = false;
+    try { (void)Render( CDV_DIGRAPH, data, 256, CDP_REFERENCE, options ); }
+    catch ( const std::invalid_argument& ) { rejected = true; }
+    assert( rejected );
+
+    // Overview indices refer to logical offsets, not the local sample index.
+    const std::vector< ByteClassSummary_s > classes( data.size() );
+    std::vector< usize > offsets( data.size() );
+    for ( usize i = 0; i < offsets.size(); ++i ) offsets[ i ] = i * 100;
+    options.digraphDistance = 1;
+    const Image_s overview = RenderOverview( CDV_DIGRAPH, classes,
+        data, offsets, 256, CDP_REFERENCE, options );
+    assert( overview.SourceAt( 0x41, 255 - 0x42 ) == 0 );
+    assert( overview.SourceAt( 0x41, 255 - 0x43 ) == 200 );
+}
+
 static void Tests_ByteClassPalette()
 {
     const std::vector< ByteCell_s > cells = {
@@ -187,7 +265,7 @@ static void Tests_PalettePresets()
         const Image_s histogram = Render(
             CDV_HISTOGRAM, classes, 256, selected );
 
-        assert( histogram.argb[ 255 * 256 ] == palette.histogram );
+        assert( histogram.argb[ 255 * 256 ] == palette.zero );
         assert( histogram.SourceAt( 0, 255 ) == 0 );
     }
 
@@ -997,6 +1075,7 @@ int main()
     Tests_CubeBoundedCloud();
     Tests_CubeFinePixelsAndGhidraPalette();
     Tests_RenderModes();
+    Tests_BytePlotAnalysis();
     Tests_ByteClassPalette();
     Tests_PalettePresets();
     Tests_Entropy();

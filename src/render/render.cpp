@@ -113,57 +113,78 @@ static void Render_ByteRasterMapped(
 static void Render_Digraph(
     Image_s& image,
     const std::vector< ByteCell_s >& data,
-    const Palette_s& palette )
+    const Palette_s& palette,
+    const BytePlotOptions_s& options )
 {
-    // Two 65,536-element arrays exceed Windows' default 1 MiB stack
-    // when combined with the caller's frame. Keep the histogram on the heap.
+    // The 65,536 counters and first-occurrence indices live on the heap,
+    // avoiding the default 1 MiB Windows stack limit.
     std::vector< u32 > counts( CANTORDUST_WINDOW_SIZE, 0u );
     std::vector< usize > first(
         CANTORDUST_WINDOW_SIZE, CANTORDUST_NO_SOURCE );
+    std::array< u32, 256 > firstByteTotals{};
+    usize total = 0;
+    const usize distance = options.digraphDistance;
+    if ( distance == 0 || distance > 256 )
+        throw std::invalid_argument( "Digraph distance must be 1..256" );
 
-    const ByteCell_s* const cells = data.data();
-
-    for ( usize i = 0; i + 1 < data.size(); ++i )
+    // Check every intermediate sample too: pairs must not jump across
+    // unloaded IDA memory. Sliding invalid-count keeps this O(n), not O(n*d).
+    if ( data.size() > distance )
     {
-        // Skip byte pairs crossing unloaded IDA memory.
-        if ( V_UNLIKELY( !cells[ i ].valid || !cells[ i + 1 ].valid ) )
+        usize invalid = 0;
+        for ( usize k = 0; k <= distance; ++k )
+            invalid += !data[ k ].valid;
+
+        for ( usize i = 0; i + distance < data.size(); ++i )
         {
-            continue;
-        }
-
-        const usize pixel =
-            ( 255u - cells[ i + 1 ].value ) * CANTORDUST_SIDE + cells[ i ].value;
-
-        ++counts[ pixel ];
-
-        if ( first[ pixel ] == CANTORDUST_NO_SOURCE )
-        {
-            first[ pixel ] = i;
+            if ( invalid == 0 )
+            {
+                const u8 firstByte = data[ i ].value;
+                const u8 secondByte = data[ i + distance ].value;
+                const usize bucket = ( 255u - secondByte ) *
+                    CANTORDUST_SIDE + firstByte;
+                ++counts[ bucket ];
+                ++firstByteTotals[ firstByte ];
+                ++total;
+                if ( first[ bucket ] == CANTORDUST_NO_SOURCE )
+                    first[ bucket ] = i;
+            }
+            if ( i + distance + 1 < data.size() )
+            {
+                invalid -= !data[ i ].valid;
+                invalid += !data[ i + distance + 1 ].valid;
+            }
         }
     }
 
-    const u32 highest =
-        *std::max_element( counts.begin(), counts.end() );
-
-    // At 256 pixels per side, every bucket is visited once. At higher
-    // resolutions the same bucket is used repeatedly, so cache its exact
-    // color once per frame instead of repeating the density logarithm.
-    if ( image.width == CANTORDUST_SIDE &&
-         image.height == CANTORDUST_SIDE )
-    {
-        for ( usize pixel = 0; pixel < counts.size(); ++pixel )
-        {
-            image.argb[ pixel ] = Render_DensityColor(
-                counts[ pixel ], highest, palette );
-            image.sourceIndex[ pixel ] = first[ pixel ];
-        }
-        return;
-    }
-
+    const u32 highest = *std::max_element( counts.begin(), counts.end() );
     std::vector< u32 > bucketColors( CANTORDUST_WINDOW_SIZE );
-    for ( usize bucket = 0; bucket < bucketColors.size(); ++bucket )
-        bucketColors[ bucket ] = Render_DensityColor(
-            counts[ bucket ], highest, palette );
+    const bool conditional = options.digraphIntensity ==
+        DigraphIntensity_e::ConditionalProbability;
+    for ( usize bucket = 0; bucket < counts.size(); ++bucket )
+    {
+        if ( !conditional )
+        {
+            bucketColors[ bucket ] = Render_DensityColor(
+                counts[ bucket ], highest, palette );
+        }
+        else
+        {
+            const u32 rowTotal = firstByteTotals[ bucket % CANTORDUST_SIDE ];
+            const f64 probability = rowTotal ?
+                static_cast< f64 >( counts[ bucket ] ) / rowTotal : 0.0;
+            bucketColors[ bucket ] = counts[ bucket ]
+                ? Math_BlendColor( palette.densityLow, palette.densityHigh,
+                    probability )
+                : palette.background;
+        }
+    }
+
+    image.bucketCounts = std::move( counts );
+    image.firstByteTotals = firstByteTotals;
+    image.observationCount = total;
+    image.pairDistance = distance;
+    image.conditionalProbability = conditional;
 
     for ( usize y = 0; y < image.height; ++y )
     {
@@ -182,62 +203,70 @@ static void Render_Digraph(
 static void Render_Histogram(
     Image_s& image,
     const std::vector< ByteCell_s >& data,
-    const Palette_s& palette )
+    const Palette_e paletteIndex,
+    const BytePlotOptions_s& options )
 {
     std::array< u32, CANTORDUST_SIDE > counts{};
     std::array< usize, CANTORDUST_SIDE > first{};
     first.fill( CANTORDUST_NO_SOURCE );
 
+    usize total = 0;
     for ( usize i = 0; i < data.size(); ++i )
     {
         const ByteCell_s& cell = data[ i ];
-
         if ( V_UNLIKELY( !cell.valid ) )
-        {
             continue;
-        }
-
         ++counts[ cell.value ];
-
+        ++total;
         if ( first[ cell.value ] == CANTORDUST_NO_SOURCE )
-        {
             first[ cell.value ] = i;
-        }
     }
 
-    const u32 highest =
-        *std::max_element( counts.begin(), counts.end() );
-
+    image.bucketCounts.assign( counts.begin(), counts.end() );
+    image.observationCount = total;
+    const u32 highest = *std::max_element( counts.begin(), counts.end() );
     if ( highest == 0 )
-    {
         return;
-    }
 
+    const auto& colors = Palette_ByteColorTable( paletteIndex );
     for ( usize x = 0; x < image.width; ++x )
     {
         const usize bucket = x * CANTORDUST_SIDE / image.width;
-
-        if ( counts[ bucket ] == 0 )
-        {
+        const u32 count = counts[ bucket ];
+        if ( count == 0 )
             continue;
+
+        f64 fraction = 0.0;
+        switch ( options.histogramScale )
+        {
+            case HistogramScale_e::Linear:
+                fraction = static_cast< f64 >( count ) / highest;
+                break;
+            case HistogramScale_e::SquareRoot:
+                fraction = std::sqrt( static_cast< f64 >( count ) / highest );
+                break;
+            case HistogramScale_e::Logarithmic:
+                fraction = Math_LogDensity( count, highest );
+                break;
         }
-
-        const usize height = Math_HistogramHeight(
-            counts[ bucket ], highest, image.height - 1 );
-
-        for ( usize y = image.height - height;
-              y < image.height; ++y )
+        const usize height = std::max< usize >( 1, static_cast< usize >(
+            std::ceil( fraction * ( image.height - 1 ) ) ) );
+        for ( usize y = image.height - height; y < image.height; ++y )
         {
             const usize pixel = y * image.width + x;
-            image.argb[ pixel ] = palette.histogram;
-            image.sourceIndex[ pixel ] = first[ bucket ];
+            image.argb[ pixel ] = colors[ bucket ];
         }
+        // The full column identifies the byte value, even above its bar;
+        // one click can always navigate to the first matching byte.
+        for ( usize y = 0; y < image.height; ++y )
+            image.sourceIndex[ y * image.width + x ] = first[ bucket ];
     }
 }
 
 Image_s Render( const View_e view,
     const std::vector< ByteCell_s >& data, const usize side,
-    const Palette_e paletteIndex )
+    const Palette_e paletteIndex,
+    const BytePlotOptions_s options )
 {
     if ( ( side != 256 && side != 512 && side != 1024 ) ||
          data.size() > side * side )
@@ -256,11 +285,11 @@ Image_s Render( const View_e view,
             break;
 
         case CDV_DIGRAPH:
-            Render_Digraph( image, data, palette );
+            Render_Digraph( image, data, palette, options );
             break;
 
         case CDV_HISTOGRAM:
-            Render_Histogram( image, data, palette );
+            Render_Histogram( image, data, paletteIndex, options );
             break;
 
         case CDV_HILBERT:
@@ -277,14 +306,15 @@ Image_s Render( const View_e view,
 
 Image_s RenderDetail( const View_e view,
     const std::vector< ByteCell_s >& data, const usize side,
-    const Palette_e paletteIndex )
+    const Palette_e paletteIndex,
+    const BytePlotOptions_s options )
 {
     if ( view != CDV_LINEAR && view != CDV_HILBERT )
     {
-        return Render( view, data, side, paletteIndex );
+        return Render( view, data, side, paletteIndex, options );
     }
 
-    Image_s image = Render( view, data, side, paletteIndex );
+    Image_s image = Render( view, data, side, paletteIndex, options );
 
     const Palette_s& palette = Palette_Get( paletteIndex );
     const u32* const byteColors = Palette_ByteColorTable( paletteIndex ).data();
@@ -367,7 +397,8 @@ Image_s RenderOverview(
     const std::vector< ByteClassSummary_s >& classes,
     const std::vector< ByteCell_s >& data,
     const std::vector< usize >& sourceOffsets,
-    const usize side, const Palette_e paletteIndex )
+    const usize side, const Palette_e paletteIndex,
+    const BytePlotOptions_s options )
 {
     if ( classes.size() != data.size() ||
          classes.size() != sourceOffsets.size() )
@@ -397,7 +428,7 @@ Image_s RenderOverview(
         return image;
     }
 
-    Image_s image = Render( view, data, side, paletteIndex );
+    Image_s image = Render( view, data, side, paletteIndex, options );
 
     for ( usize& index : image.sourceIndex )
     {

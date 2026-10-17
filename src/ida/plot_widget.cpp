@@ -7,6 +7,7 @@
 #include "math/hilbert.h"
 
 #include <QRegion>
+#include <QToolTip>
 
 namespace cantordust
 {
@@ -84,6 +85,12 @@ void PlotWidget::SetOnHover(
     std::function< void( usize ) > callback )
 {
     m_onHover = std::move( callback );
+}
+
+void PlotWidget::SetAddressFormatter(
+    std::function< QString( usize ) > callback )
+{
+    m_addressFormatter = std::move( callback );
 }
 
 const Image_s& PlotWidget::DisplayImage() const
@@ -244,6 +251,11 @@ usize PlotWidget::SourceAt(
 
 void PlotWidget::ClearHover()
 {
+    if ( m_inspectedBucket != CANTORDUST_NO_SOURCE )
+    {
+        m_inspectedBucket = CANTORDUST_NO_SOURCE;
+        QToolTip::hideText();
+    }
     if ( m_hoverPixel != QPoint( -1, -1 ) )
     {
         m_hoverPixel = QPoint( -1, -1 );
@@ -269,10 +281,29 @@ void PlotWidget::UpdateHover( const QPoint& position )
 
     if ( source == CANTORDUST_NO_SOURCE )
     {
-        ClearHover();
+        if ( pixel.x() < 0 )
+        {
+            ClearHover();
+            return;
+        }
+        // Empty heatmap bins still have meaningful zero-count tooltips.
+        // Don't clear the inspection bucket on each mouse move, otherwise
+        // Qt repeatedly hides and reopens the same tooltip (flicker).
+        if ( m_hoverPixel != QPoint( -1, -1 ) )
+        {
+            m_hoverPixel = QPoint( -1, -1 );
+            update();
+        }
+        if ( m_hoverSource != CANTORDUST_NO_SOURCE )
+        {
+            m_hoverSource = CANTORDUST_NO_SOURCE;
+            if ( m_onHover ) m_onHover( CANTORDUST_NO_SOURCE );
+        }
+        ShowBucketInspection( position, pixel );
         return;
     }
 
+    ShowBucketInspection( position, pixel );
     if ( pixel != m_hoverPixel )
     {
         m_hoverPixel = pixel;
@@ -288,6 +319,68 @@ void PlotWidget::UpdateHover( const QPoint& position )
             m_onHover( source );
         }
     }
+}
+
+void PlotWidget::ShowBucketInspection(
+    const QPoint& position, const QPoint& pixel )
+{
+    if ( pixel.x() < 0 || pixel.y() < 0 ||
+         m_image.bucketCounts.empty() ||
+         ( m_viewMode != CDV_HISTOGRAM && m_viewMode != CDV_DIGRAPH ) )
+        return;
+
+    const Image_s& image = DisplayImage();
+    const usize first = static_cast< usize >( pixel.x() ) * 256 / image.width;
+    const usize second = 255 -
+        static_cast< usize >( pixel.y() ) * 256 / image.height;
+    const usize bucket = m_viewMode == CDV_HISTOGRAM
+        ? first : ( 255 - second ) * 256 + first;
+    if ( bucket == m_inspectedBucket || bucket >= m_image.bucketCounts.size() )
+        return;
+
+    m_inspectedBucket = bucket;
+    const u32 count = m_image.bucketCounts[ bucket ];
+    const f64 percent = m_image.observationCount
+        ? 100.0 * static_cast< f64 >( count ) / m_image.observationCount
+        : 0.0;
+    QString text;
+    if ( m_viewMode == CDV_HISTOGRAM )
+    {
+        const QChar printable = first >= 0x20 && first <= 0x7e
+            ? QChar( static_cast< ushort >( first ) ) : QChar( '.' );
+        text = QString( "Byte 0x%1 (%2, '%3')\n"
+            "Count: %4 (%5% of valid bytes)" )
+            .arg( static_cast< uint >( first ), 2, 16, QChar( '0' ) )
+            .arg( static_cast< uint >( first ) )
+            .arg( printable )
+            .arg( count )
+            .arg( percent, 0, 'f', 2 );
+    }
+    else
+    {
+        const u32 rowTotal = m_image.firstByteTotals[ first ];
+        const f64 conditional = rowTotal
+            ? 100.0 * static_cast< f64 >( count ) / rowTotal : 0.0;
+        text = QString( "Pair 0x%1 -> 0x%2 | distance %3\n"
+            "Count: %4 (%5% of observed pairs)\n"
+            "P(next | first): %6% (%7 starting with 0x%8)" )
+            .arg( static_cast< uint >( first ), 2, 16, QChar( '0' ) )
+            .arg( static_cast< uint >( second ), 2, 16, QChar( '0' ) )
+            .arg( static_cast< qulonglong >( m_image.pairDistance ) )
+            .arg( count )
+            .arg( percent, 0, 'f', 2 )
+            .arg( conditional, 0, 'f', 2 )
+            .arg( rowTotal )
+            .arg( static_cast< uint >( first ), 2, 16, QChar( '0' ) );
+    }
+    const usize source = m_image.SourceAt(
+        static_cast< usize >( pixel.x() ),
+        static_cast< usize >( pixel.y() ) );
+    if ( source != CANTORDUST_NO_SOURCE && m_addressFormatter )
+        text += "\nFirst match: " + m_addressFormatter( source );
+    if ( count > 0 )
+        text += "\nClick or drag to navigate.";
+    QToolTip::showText( mapToGlobal( position ), text, this );
 }
 
 void PlotWidget::NavigateAt( const QPoint& position, const bool force )
