@@ -223,8 +223,15 @@ CantorPanel::CantorPanel( QWidget* const parent )
 
     QPushButton* const cursorButton = new QPushButton( "Cursor", this );
     QPushButton* const refreshButton = new QPushButton( "Refresh", this );
+    m_anomalyButton = new QPushButton( "Anomalies", this );
+    m_anomalyButton->setToolTip(
+        "Scan the selected segments for heuristic byte anomalies. "
+        "Results include clickable addresses and bitmap markers." );
+    QObject::connect( m_anomalyButton, &QPushButton::clicked,
+        this, [this]() { ShowAnomalyExplorer(); } );
     selectorRow->addWidget( cursorButton );
     selectorRow->addWidget( refreshButton );
+    selectorRow->addWidget( m_anomalyButton );
     // Live sync is a frequent navigation action, not an Explorer setting.
     // Reuse the existing persisted checkbox without adding another row.
     selectorRow->addWidget( m_followIdaToggle );
@@ -1827,6 +1834,7 @@ CantorPanel::CantorPanel( QWidget* const parent )
             QSettings settings( "CantorDust", "IDA" );
             settings.setValue( "paletteDetail", m_paletteBox->currentIndex() );
             m_plot->SetPalette( CurrentPalette() );
+            RefreshAnomalyPalette();
             RenderCurrent();
         } );
 

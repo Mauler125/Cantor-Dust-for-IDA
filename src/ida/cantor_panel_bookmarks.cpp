@@ -422,6 +422,9 @@ bool CantorPanel::RestoreInvestigation( const QJsonObject& item )
     SyncRangeControl();
     RefreshUniverseSearch();
     Reload();
+    // Bookmarks restore palette selectors with blocked signals. Recolor the
+    // Anomaly Explorer swatches just like the Detail/Overview plot markers.
+    RefreshAnomalyPalette();
     RenderCurrent();
     RenderOverview();
     m_universePlot->RestoreCamera({

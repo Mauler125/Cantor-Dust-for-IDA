@@ -176,6 +176,7 @@ set(CANTORDUST_ENGINE_SOURCES
     src/tier1/universe_filter.cpp
     src/tier1/universe_inspector.cpp
     src/tier1/universe_history.cpp
+    src/math/anomaly.cpp
     src/math/color.cpp
     src/math/cube.cpp
     src/math/cube_lighting.cpp
@@ -275,6 +276,12 @@ if(BUILD_TESTING)
     target_include_directories(cantordust_scalar_types_tests
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/public)
     add_test(NAME scalar_types COMMAND cantordust_scalar_types_tests)
+
+    add_executable(cantordust_anomaly_tests tests/anomaly_tests.cpp)
+    target_include_directories(cantordust_anomaly_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(cantordust_anomaly_tests PRIVATE cantordust_core)
+    add_test(NAME anomaly_detection COMMAND cantordust_anomaly_tests)
 
     add_executable(cantordust_constants_tests tests/constants_tests.cpp)
     target_include_directories(cantordust_constants_tests
@@ -561,6 +568,7 @@ if(CANTORDUST_BUILD_IDA_PLUGIN)
         SOURCES
             src/ida/ida_plugin.cpp
             src/ida/cantor_panel.cpp
+            src/ida/cantor_panel_anomalies.cpp
             src/ida/cantor_panel_menus.cpp
             src/ida/cantor_panel_bookmarks.cpp
             src/ida/cantor_panel_ranges.cpp

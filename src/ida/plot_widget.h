@@ -6,6 +6,7 @@
 #include "cantordust/types.h"
 #include "cantordust/palette.h"
 #include "ida/navigation_gate.h"
+#include "math/anomaly.h"
 #include "math/raster_fit.h"
 
 #include <QElapsedTimer>
@@ -28,6 +29,8 @@ public:
     void SetImage( Image_s image );
     void SetPalette( Palette_e palette );
     void SetHighlights( std::vector< QRect > highlights );
+    // Anomaly positions are source-image traversal ordinals, not addresses.
+    void SetAnomalyMarkers( std::vector< AnomalyMarker_s > markers );
     void SetViewMode( View_e mode );
     void SetOnWheel(
         std::function< void( usize, usize,
@@ -50,6 +53,7 @@ private:
     const Image_s& DisplayImage() const;
     void RebuildDisplayRaster();
     void RebuildDisplayHighlights();
+    void RebuildAnomalyMarkers();
     QRect TargetRect() const;
     QRect MapImageRect( const QRect& imageRect, const QRect& target ) const;
     usize SourceAt( const QPoint& position, QPoint* pixel ) const;
@@ -63,6 +67,13 @@ private:
     FittedRaster_s m_fittedRaster;
     std::vector< QRect > m_highlights;
     std::vector< QRect > m_displayHighlights;
+    struct DisplayAnomalyMarker_s
+    {
+        QPoint pixel;
+        AnomalyKind_e kind = AnomalyKind_e::HighEntropy;
+    };
+    std::vector< AnomalyMarker_s > m_anomalyMarkers;
+    std::vector< DisplayAnomalyMarker_s > m_displayAnomalyMarkers;
     View_e m_viewMode = CDV_HILBERT;
     std::function< void( usize, usize,
         usize, int ) > m_onWheel;

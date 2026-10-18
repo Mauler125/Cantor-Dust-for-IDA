@@ -2,6 +2,7 @@
 #include "ida/plot_widget.h"
 #include "cantordust/scalar_types.h"
 #include "ida/range_selection_style.h"
+#include "math/anomaly_palette.h"
 
 #include "math/pixel.h"
 #include "math/hilbert.h"
@@ -75,6 +76,78 @@ void PlotWidget::SetHighlights( std::vector< QRect > highlights )
     update();
 }
 
+void PlotWidget::SetAnomalyMarkers( std::vector< AnomalyMarker_s > markers )
+{
+    std::sort( markers.begin(), markers.end(),
+        []( const AnomalyMarker_s& a, const AnomalyMarker_s& b ) {
+            return a.ordinal < b.ordinal ||
+                ( a.ordinal == b.ordinal && a.kind < b.kind );
+        } );
+    markers.erase( std::unique( markers.begin(), markers.end(),
+        []( const AnomalyMarker_s& a, const AnomalyMarker_s& b ) {
+            return a.ordinal == b.ordinal && a.kind == b.kind;
+        } ), markers.end() );
+    if ( m_anomalyMarkers.size() == markers.size() &&
+         std::equal( m_anomalyMarkers.begin(), m_anomalyMarkers.end(),
+             markers.begin(), []( const AnomalyMarker_s& a,
+                 const AnomalyMarker_s& b ) {
+                 return a.ordinal == b.ordinal && a.kind == b.kind;
+             } ) )
+        return;
+    m_anomalyMarkers = std::move( markers );
+    RebuildAnomalyMarkers();
+    update();
+}
+
+void PlotWidget::RebuildAnomalyMarkers()
+{
+    m_displayAnomalyMarkers.clear();
+    const Image_s& display = DisplayImage();
+    if ( m_anomalyMarkers.empty() || display.width == 0 ||
+         ( m_viewMode != CDV_LINEAR && m_viewMode != CDV_HILBERT ) )
+        return;
+
+    if ( !m_fittedRaster.ordinal.empty() &&
+         ( display.width != m_image.width ||
+           display.height != m_image.height ) )
+    {
+        // The fitted Gilbert/Hilbert traversal may be non-square. Match
+        // ordinals to every finding category without losing palette colors.
+        for ( usize i = 0; i < m_fittedRaster.ordinal.size(); ++i )
+        {
+            const usize ordinal = m_fittedRaster.ordinal[ i ];
+            auto marker = std::lower_bound( m_anomalyMarkers.begin(),
+                m_anomalyMarkers.end(), ordinal,
+                []( const AnomalyMarker_s& a, const usize value ) {
+                    return a.ordinal < value;
+                } );
+            while ( marker != m_anomalyMarkers.end() &&
+                    marker->ordinal == ordinal )
+            {
+                m_displayAnomalyMarkers.push_back({
+                    QPoint( static_cast< int >( i % display.width ),
+                        static_cast< int >( i / display.width ) ),
+                    marker->kind });
+                ++marker;
+            }
+        }
+    }
+    else
+    {
+        for ( const AnomalyMarker_s& marker : m_anomalyMarkers )
+        {
+            if ( marker.ordinal >= m_image.width * m_image.height ) continue;
+            const Point_s p = m_viewMode == CDV_HILBERT
+                ? Math_HilbertPosition( marker.ordinal, m_image.width )
+                : Point_s{ marker.ordinal % m_image.width,
+                    marker.ordinal / m_image.width };
+            m_displayAnomalyMarkers.push_back({
+                QPoint( static_cast< int >( p.x ),
+                    static_cast< int >( p.y ) ), marker.kind });
+        }
+    }
+}
+
 void PlotWidget::SetOnNavigate(
     std::function< void( usize ) > callback )
 {
@@ -113,6 +186,7 @@ void PlotWidget::RebuildDisplayRaster()
     }
 
     RebuildDisplayHighlights();
+    RebuildAnomalyMarkers();
 }
 
 void PlotWidget::RebuildDisplayHighlights()
@@ -463,6 +537,31 @@ void PlotWidget::paintEvent( QPaintEvent* )
     painter.setPen( QColor::fromRgba(
         Palette_Get( m_palette ).missing ) );
     painter.drawRect( target.adjusted( 0, 0, -1, -1 ) );
+
+    // Small high-contrast markers, drawn over the byte raster but under
+    // its hover indicator. These represent heuristic findings, not proof.
+    if ( !m_displayAnomalyMarkers.empty() )
+    {
+        painter.save();
+        for ( const DisplayAnomalyMarker_s& marker : m_displayAnomalyMarkers )
+        {
+            const usize pixelIndex =
+                static_cast< usize >( marker.pixel.y() ) * image.width +
+                static_cast< usize >( marker.pixel.x() );
+            painter.setPen( QPen( QColor::fromRgba(
+                Anomaly_OutlineColor( image.argb[ pixelIndex ] ) ), 1.7 ) );
+            painter.setBrush( QColor::fromRgba(
+                Anomaly_PaletteColor( marker.kind, m_palette ) ) );
+            const int x = target.x() + static_cast< int >(
+                ( static_cast< i64 >( marker.pixel.x() ) * 2 + 1 ) *
+                target.width() / static_cast< i64 >( image.width * 2 ) );
+            const int y = target.y() + static_cast< int >(
+                ( static_cast< i64 >( marker.pixel.y() ) * 2 + 1 ) *
+                target.height() / static_cast< i64 >( image.height * 2 ) );
+            painter.drawEllipse( QPoint( x, y ), 4, 4 );
+        }
+        painter.restore();
+    }
 
     if ( m_hoverPixel.x() >= 0 && m_hoverPixel.y() >= 0 )
     {

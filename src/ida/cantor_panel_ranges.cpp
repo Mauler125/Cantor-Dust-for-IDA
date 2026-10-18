@@ -132,6 +132,7 @@ void CantorPanel::ListSegments( const bool followCursor )
 
 void CantorPanel::RebuildRanges()
 {
+    ClearAnomalies();
     m_ranges.clear();
     m_cells.clear();
     m_totalLength = 0;
@@ -644,6 +645,8 @@ void CantorPanel::ResetEmpty( const QString& message )
     m_overviewCells.clear();
     m_overviewPlot->SetImage( Render( CDV_LINEAR, {}, Resolution(), CurrentOverviewPalette() ) );
     m_overviewPlot->SetHighlights( {} );
+    m_plot->SetAnomalyMarkers( {} );
+    m_overviewPlot->SetAnomalyMarkers( {} );
     m_entropyStrip->SetSamples( {} );
 }
 

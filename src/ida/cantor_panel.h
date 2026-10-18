@@ -11,6 +11,7 @@
 #include "cantordust/renderer.h"
 #include "ida/entropy_widget.h"
 #include "math/ranges.h"
+#include "math/anomaly.h"
 #include "tier1/universe_history.h"
 
 #include <QtWidgets>
@@ -102,6 +103,14 @@ private:
     void ExportUniverseGraph( UniverseExportFormat_e format = UniverseExportFormat_e::Choose );
     void ShowSettingsTab( QWidget* page );
     void RefreshData();
+    void ShowAnomalyExplorer();
+    void ScanAnomalies();
+    void ShowAnomalySettings();
+    void ClearAnomalies();
+    void RefreshAnomalyPalette();
+    std::vector< AnomalyMarker_s > AnomalyMarkers(
+        u64 start, u64 span, View_e mode ) const;
+    void GoToAnomaly( u64 offset );
     void GoToIdaCursor();
     QWidget* SupplementalFeaturesForMode( View_e mode ) const;
     void UpdateSupplementalFeatures();
@@ -127,6 +136,13 @@ private:
     void NavigateOverview( usize offset );
     void HoverOverview( usize offset );
 
+    QDialog* m_anomalyDialog = nullptr;
+    QTableWidget* m_anomalyTable = nullptr;
+    QLabel* m_anomalyStatus = nullptr;
+    QPushButton* m_anomalyButton = nullptr;
+    std::vector< AnomalyFinding_s > m_anomalies;
+    bool m_anomalyScanned = false;
+    AnomalyOptions_s m_anomalyOptions;
     QDialog* const m_aboutDialog;
     QDialog* const m_settingsDialog;
     QTabWidget* const m_settingsTabs;

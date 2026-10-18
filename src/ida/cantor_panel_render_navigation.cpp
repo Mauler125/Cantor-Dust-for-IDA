@@ -167,6 +167,8 @@ void CantorPanel::RenderCurrent()
     {
         m_detailStack->setCurrentWidget( m_plot );
         m_plot->SetViewMode( mode );
+        m_plot->SetAnomalyMarkers( AnomalyMarkers(
+            m_windowOffset, m_detailSpan, mode ) );
         m_plot->SetImage( m_detailSampled
             ? cantordust::RenderOverview( mode, m_detailSampleClasses,
                 m_cells, m_detailSampleOffsets,
@@ -265,6 +267,8 @@ void CantorPanel::RenderOverview()
         else
         {
             m_overviewPlot->SetViewMode( mode );
+            m_overviewPlot->SetAnomalyMarkers( AnomalyMarkers(
+                m_overviewOffset, m_overviewSpan, mode ) );
             m_overviewPlot->SetImage( cantordust::RenderOverview(
                 mode, m_overviewClasses, m_overviewCells,
                 m_overviewOffsets, Resolution(), CurrentOverviewPalette(),
@@ -277,6 +281,8 @@ void CantorPanel::RenderOverview()
         m_overviewImageDirty = false;
     }
 
+    m_overviewPlot->SetAnomalyMarkers( AnomalyMarkers(
+        m_overviewOffset, m_overviewSpan, mode ) );
     m_overviewPlot->SetHighlights( BuildOverviewHighlights() );
 
     const u64 overviewEnd = m_overviewOffset + m_overviewSpan;
