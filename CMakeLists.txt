@@ -52,7 +52,7 @@ if(CANTORDUST_BUILD_IDA_PLUGIN)
         "(legacy: ${CANTORDUST_LEGACY_SDK})")
 endif()
 
-project(ida_cantordust VERSION 0.8.2 LANGUAGES CXX)
+project(ida_cantordust VERSION 0.8.4 LANGUAGES CXX)
 
 # A native ARM64 runner can still pick the emulated x64 MSVC toolchain.
 # Fail during configuration, before any 46-step compile or costly link.
