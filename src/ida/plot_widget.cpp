@@ -8,7 +8,6 @@
 #include "math/hilbert.h"
 
 #include <QRegion>
-#include <QToolTip>
 
 namespace cantordust
 {

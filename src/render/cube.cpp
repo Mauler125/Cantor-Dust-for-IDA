@@ -11,7 +11,6 @@
 #define CANTORDUST_CUBE_VOXELS ( CANTORDUST_CUBE_GRID * \
     CANTORDUST_CUBE_GRID * CANTORDUST_CUBE_GRID )
 
-#include <array>
 #include <cstring>
 
 namespace cantordust

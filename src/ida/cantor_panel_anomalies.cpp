@@ -14,9 +14,6 @@
 #include <QProgressDialog>
 #include <QTableWidget>
 
-#include <algorithm>
-#include <array>
-
 namespace cantordust
 {
 

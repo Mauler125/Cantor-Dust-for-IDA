@@ -111,7 +111,8 @@ const std::array< u32, 256 >& Palette_ByteColorTable( const Palette_e index )
         return result;
     }();
     const unsigned int ordinal = static_cast< unsigned int >( index );
-    return tables[ ordinal < CDP_COUNT ? ordinal : CDP_REFERENCE ];
+    return tables[ ordinal < CDP_COUNT ? ordinal :
+        static_cast< unsigned int >( CDP_REFERENCE ) ];
 }
 
 const Palette_s& Palette_Get( const Palette_e index )
